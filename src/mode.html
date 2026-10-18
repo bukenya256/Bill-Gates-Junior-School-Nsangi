@@ -1,0 +1,8 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Bill Gates Junior School – Setup</title>
+<link rel="stylesheet" href="shared/ui.css"></head><body class="center-body">
+<div class="setup"><div class="logo">🎓</div><h1>Bill Gates Junior School Nsangi</h1><p class="muted">First-time setup. What is this computer used for? <b>This is chosen once.</b></p>
+<div class="choices">
+<button class="choice" data-m="hm"><b>Headteacher's PC</b><span>MAIN computer. Keeps all records: students, fees, receipts, staff, salaries, and receives teachers' marks. Backs up to the cloud.</span></button>
+<button class="choice" data-m="teacher"><b>Teachers' PC</b><span>Director of Studies / teachers. Sees only the student list and classes. Enters marks and prints reports.</span></button>
+</div><p id="err" class="err"></p></div>
+<script>document.querySelectorAll('.choice').forEach(b=>b.onclick=async()=>{ if(!confirm('Set this computer as the '+b.querySelector('b').textContent+'?'))return; try{await window.bgs.call('mode.set',b.dataset.m)}catch(e){document.getElementById('err').textContent=e.message}})</script></body></html>

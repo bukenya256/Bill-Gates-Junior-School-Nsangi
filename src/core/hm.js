@@ -1,0 +1,238 @@
+'use strict';
+const crypto = require('crypto');
+const R = require('../shared/rules');
+
+const DEFAULTS = {
+  meta: { createdAt: null, pw: null, lanKey: null, counters: {}, current: null, seq: 0, admSeq: {} },
+  students: {}, staff: {}, payments: {}, bills: {}, salaryBills: {}, marks: {}, comments: {}, audit: [], dirty: {},
+};
+const nowISO = () => new Date().toISOString();
+class Fail extends Error {}
+const fail = m => { throw new Fail(m); };
+
+class HM {
+  constructor(store, hooks = {}) {
+    this.s = store; this.d = store.data; this.hooks = hooks;
+    const m = this.d.meta;
+    if (!m.createdAt) m.createdAt = nowISO();
+    if (!m.lanKey) m.lanKey = crypto.randomBytes(4).toString('hex').toUpperCase().replace(/(.{4})/, '$1-');
+    if (!m.current) m.current = R.detectTerm(R.localISO());
+    store.save(true);
+  }
+  /* ---------- plumbing ---------- */
+  touch(col, id) { this.d.dirty[col + ':' + id] = (this.d.dirty[col + ':' + id] || 0) + 1; }
+  log(action, detail) { this.d.audit.push({ at: nowISO(), action, detail }); if (this.d.audit.length > 3000) this.d.audit.splice(0, 500); this.touch('audit', this.d.audit.length); }
+  done(now = true) { this.s.save(now); this.hooks.onChange && this.hooks.onChange(); }
+  cur() { return this.d.meta.current; }
+
+  /* ---------- password ---------- */
+  hasPassword() { return !!this.d.meta.pw; }
+  _hash(pw, salt) { return crypto.scryptSync(pw, salt, 32).toString('hex'); }
+  setPassword(pw, old) {
+    if (String(pw || '').length < 4) fail('Password must be at least 4 characters.');
+    if (this.d.meta.pw && !this.checkPassword(old)) fail('The current password is wrong.');
+    const salt = crypto.randomBytes(16).toString('hex'); this.d.meta.pw = { salt, hash: this._hash(pw, salt) }; this.done();
+  }
+  checkPassword(pw) {
+    const p = this.d.meta.pw; if (!p) return false;
+    const a = Buffer.from(this._hash(String(pw || ''), p.salt), 'hex'), b = Buffer.from(p.hash, 'hex');
+    return crypto.timingSafeEqual(a, b);
+  }
+
+  /* ---------- fees / bills ---------- */
+  sumPaid(pred) { let t = 0; for (const p of Object.values(this.d.payments)) if (!p.void && pred(p)) t += p.amount; return t; }
+  admissionPaid(sid) { return this.sumPaid(p => p.kind === 'admission' && p.studentId === sid); }
+  feesPaid(sid, y, t) { return this.sumPaid(p => p.kind === 'fees' && p.studentId === sid && p.year === y && p.term === t); }
+  bill(s, y, t, create = true) {
+    const key = `${y}|${t}|${s.id}`; let b = this.d.bills[key];
+    if (b) return b;
+    const c = this.cur();
+    if (!create || s.status !== 'active' || !s.enrolled) return null;
+    if (R.termIdx(y, t) > R.termIdx(c.year, c.term) || R.termIdx(y, t) < R.termIdx(s.enrolled.year, s.enrolled.term)) return null;
+    b = this.d.bills[key] = { key, studentId: s.id, year: y, term: t, due: R.feeFor(s.className, s.type), type: s.type, className: s.className };
+    this.touch('bills', key); return b;
+  }
+  refreshCurrentBill(s) {
+    const c = this.cur(), b = this.d.bills[`${c.year}|${c.term}|${s.id}`];
+    if (b) { b.due = R.feeFor(s.className, s.type); b.type = s.type; b.className = s.className; this.touch('bills', b.key); }
+  }
+  feeRow(s, y, t) {
+    const b = this.bill(s, y, t); const idx = R.termIdx(y, t);
+    let arrears = 0;
+    for (const x of Object.values(this.d.bills)) if (x.studentId === s.id && R.termIdx(x.year, x.term) < idx) arrears += Math.max(0, x.due - this.feesPaid(s.id, x.year, x.term));
+    const paid = this.feesPaid(s.id, y, t), due = b ? b.due : 0;
+    return { has: !!b, due, paid, balance: Math.max(0, due - paid), arrears, type: b ? b.type : s.type, status: !b ? 'none' : due - paid <= 0 ? 'paid' : paid > 0 ? 'partial' : 'unpaid' };
+  }
+
+  /* ---------- salaries ---------- */
+  salaryDemand(st, period) {
+    const sb = this.d.salaryBills[`${st.id}|${period}`];
+    if (sb) return sb.demand;
+    return st.employedOn && period < st.employedOn.slice(0, 7) ? 0 : st.salary;
+  }
+  salaryPaid(stid, period) { return this.sumPaid(p => p.kind === 'salary' && p.staffId === stid && p.period === period); }
+
+  /* ---------- state for the screens ---------- */
+  getState({ year, term, period } = {}) {
+    const c = this.cur(); year = Number(year) || c.year; term = Number(term) || c.term;
+    period = period || `${year}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+    // make sure everybody active has this term's bill (only for terms up to the current one)
+    const students = Object.values(this.d.students).map(s => {
+      const fee = this.feeRow(s, year, term), ap = this.admissionPaid(s.id);
+      return { ...s, admission: { fee: R.ADMISSION_FEE, paid: ap, balance: Math.max(0, R.ADMISSION_FEE - ap), status: ap >= R.ADMISSION_FEE ? 'paid' : 'pending' }, fee, termFee: R.feeFor(s.className, s.type) };
+    }).sort((a, b) => (a.last + a.first).localeCompare(b.last + b.first));
+    this.s.save();
+    const staff = Object.values(this.d.staff).map(w => {
+      const demand = this.salaryDemand(w, period), paid = this.salaryPaid(w.id, period);
+      return { ...w, period: { key: period, demand, paid, balance: Math.max(0, demand - paid) } };
+    }).sort((a, b) => (a.last + a.first).localeCompare(b.last + b.first));
+    const payments = Object.values(this.d.payments).sort((a, b) => b.ts.localeCompare(a.ts));
+    return { school: R.SCHOOL, current: c, view: { year, term, period }, students, staff, payments, lanKey: this.d.meta.lanKey, seq: this.d.meta.seq };
+  }
+
+  /* ---------- admissions & students ---------- */
+  _need(v, label) { if (!String(v || '').trim()) fail(`${label} is required.`); return String(v).trim(); }
+  addApplication(f) {
+    const first = this._need(f.first, 'First name'), last = this._need(f.last, 'Surname');
+    if (!R.CLASSES.includes(f.className)) fail('Choose the class applied for.');
+    const type = f.type === 'boarding' ? 'boarding' : 'day', c = this.cur();
+    const n = (this.d.meta.admSeq[c.year] = (this.d.meta.admSeq[c.year] || 0) + 1);
+    const id = `BGS/${c.year}/${String(n).padStart(3, '0')}`;
+    const s = this.d.students[id] = { id, first, last, className: f.className, type, gender: f.gender || '', dob: f.dob || '', parent: String(f.parent || '').trim(), phone: String(f.phone || '').trim(), address: String(f.address || '').trim(),
+      status: 'pending', enrolled: null, typeHistory: [{ year: c.year, term: c.term, type, at: nowISO() }], appliedOn: R.localISO(), createdAt: nowISO() };
+    this.touch('students', id); this.log('application', `${id} ${first} ${last}`);
+    let receipt = null; const amt = R.parseMoney(f.paidNow);
+    if (amt > 0) receipt = this._payAdmission(s, amt, f.method, '');
+    this.done(); return { student: s, receipt };
+  }
+  _payAdmission(s, amount, method, note) {
+    const before = this.admissionPaid(s.id), left = R.ADMISSION_FEE - before;
+    if (left <= 0) fail('The admission fee is already fully paid.');
+    if (amount <= 0) fail('Enter the amount received.');
+    if (amount > left) fail(`Amount is more than the remaining admission balance (${R.money(left)}).`);
+    const p = this._receipt({ kind: 'admission', studentId: s.id, studentName: `${s.first} ${s.last}`, className: s.className, type: s.type, year: this.cur().year, term: this.cur().term, amount, method, note, due: R.ADMISSION_FEE, paidBefore: before, paidTotal: before + amount, balance: left - amount });
+    if (before + amount >= R.ADMISSION_FEE && s.status === 'pending') {
+      s.status = 'active'; s.enrolled = { year: this.cur().year, term: this.cur().term }; s.activatedOn = R.localISO();
+      this.touch('students', s.id); this.bill(s, this.cur().year, this.cur().term); this.log('admitted', `${s.id} admission fee complete – now ACTIVE`);
+    }
+    return p;
+  }
+  payAdmission(sid, amount, method, note) { const s = this.d.students[sid] || fail('Student not found.'); const p = this._payAdmission(s, R.parseMoney(amount), method, note); this.done(); return p; }
+  updateStudent(sid, f) {
+    const s = this.d.students[sid] || fail('Student not found.');
+    for (const k of ['first', 'last', 'parent', 'phone', 'address', 'gender', 'dob']) if (f[k] !== undefined) s[k] = String(f[k]).trim();
+    if (!s.first || !s.last) fail('Name cannot be empty.');
+    if (f.className && f.className !== s.className) { if (!R.CLASSES.includes(f.className)) fail('Unknown class.'); this.log('class change', `${sid}: ${s.className} → ${f.className}`); s.className = f.className; this.refreshCurrentBill(s); }
+    this.touch('students', sid); this.done(); return s;
+  }
+  setType(sid, type) {
+    const s = this.d.students[sid] || fail('Student not found.');
+    if (!['day', 'boarding'].includes(type)) fail('Type must be day or boarding.');
+    if (s.type === type) return s;
+    const c = this.cur(); s.type = type; s.typeHistory.push({ year: c.year, term: c.term, type, at: nowISO() });
+    this.refreshCurrentBill(s); this.touch('students', sid); this.log('type change', `${sid} → ${type}`); this.done(); return s;
+  }
+  setStudentStatus(sid, status, reason) {
+    const s = this.d.students[sid] || fail('Student not found.');
+    if (s.status === 'pending') fail('This applicant has not completed the admission fee yet.');
+    if (!['active', 'inactive'].includes(status)) fail('Bad status.');
+    s.status = status; s.statusNote = String(reason || '').trim(); s.statusChangedOn = R.localISO();
+    if (status === 'active') this.bill(s, this.cur().year, this.cur().term);
+    this.touch('students', sid); this.log('student ' + status, `${sid} ${s.statusNote}`); this.done(); return s;
+  }
+
+  /* ---------- school fees ---------- */
+  payFees(sid, year, term, amount, method, note) {
+    const s = this.d.students[sid] || fail('Student not found.'); year = Number(year); term = Number(term);
+    if (s.status === 'pending') fail('Complete the admission fee first.');
+    const b = this.bill(s, year, term); if (!b) fail('No school fees bill exists for this student in that term.');
+    amount = R.parseMoney(amount); if (amount <= 0) fail('Enter the amount received.');
+    const before = this.feesPaid(sid, year, term), left = b.due - before;
+    if (left <= 0) fail('This term is already fully paid.');
+    if (amount > left) fail(`Amount is more than the balance (${R.money(left)}).`);
+    const p = this._receipt({ kind: 'fees', studentId: sid, studentName: `${s.first} ${s.last}`, className: b.className, type: b.type, year, term, amount, method, note, due: b.due, paidBefore: before, paidTotal: before + amount, balance: left - amount });
+    this.done(); return p;
+  }
+
+  /* ---------- staff ---------- */
+  addStaff(f) {
+    const first = this._need(f.first, 'First name'), last = this._need(f.last, 'Surname'), title = this._need(f.title, 'Job title'), salary = R.parseMoney(f.salary);
+    if (salary <= 0) fail('Enter the monthly salary.');
+    const n = Object.keys(this.d.staff).length + 1; let id = `STF-${String(n).padStart(3, '0')}`; while (this.d.staff[id]) id += 'x';
+    const w = this.d.staff[id] = { id, first, last, title, salary, phone: String(f.phone || '').trim(), status: 'active', employedOn: f.employedOn || R.localISO(), salaryHistory: [{ salary, on: R.localISO() }], createdAt: nowISO() };
+    this.touch('staff', id); this.log('staff added', `${id} ${first} ${last} ${salary}`); this.done(); return w;
+  }
+  updateStaff(id, f) {
+    const w = this.d.staff[id] || fail('Worker not found.');
+    for (const k of ['first', 'last', 'title', 'phone']) if (f[k] !== undefined) w[k] = String(f[k]).trim();
+    if (f.salary !== undefined) { const v = R.parseMoney(f.salary); if (v <= 0) fail('Enter the monthly salary.'); if (v !== w.salary) { w.salary = v; w.salaryHistory.push({ salary: v, on: R.localISO() }); } }
+    this.touch('staff', id); this.log('staff updated', id); this.done(); return w;
+  }
+  setStaffStatus(id, status) {
+    const w = this.d.staff[id] || fail('Worker not found.');
+    if (!['active', 'inactive'].includes(status)) fail('Bad status.');
+    w.status = status; w.statusChangedOn = R.localISO(); this.touch('staff', id); this.log('staff ' + status, id); this.done(); return w;
+  }
+  paySalary(id, period, amount, method, note) {
+    const w = this.d.staff[id] || fail('Worker not found.');
+    if (!/^\d{4}-\d{2}$/.test(period || '')) fail('Choose the month being paid.');
+    amount = R.parseMoney(amount); if (amount <= 0) fail('Enter the amount paid.');
+    const demand = this.salaryDemand(w, period), before = this.salaryPaid(id, period), left = demand - before;
+    if (demand <= 0) fail('No salary is due for that month.');
+    if (left <= 0) fail('This month is already fully paid.');
+    if (amount > left) fail(`Amount is more than the salary still owed (${R.money(left)}).`);
+    const k = `${id}|${period}`; if (!this.d.salaryBills[k]) { this.d.salaryBills[k] = { key: k, staffId: id, period, demand }; this.touch('salaryBills', k); }
+    const p = this._receipt({ kind: 'salary', staffId: id, staffName: `${w.first} ${w.last}`, title: w.title, period, year: this.cur().year, term: this.cur().term, amount, method, note, due: demand, paidBefore: before, paidTotal: before + amount, balance: left - amount });
+    this.done(); return p;
+  }
+  voidPayment(id, reason) {
+    const p = this.d.payments[id] || fail('Receipt not found.');
+    if (p.kind === 'admission') fail('Admission payments cannot be cancelled here.');
+    if (p.void) fail('Already cancelled.'); if (!String(reason || '').trim()) fail('Give a reason for cancelling.');
+    p.void = true; p.voidReason = String(reason).trim(); p.voidAt = nowISO(); this.touch('payments', id); this.log('receipt cancelled', `${id}: ${p.voidReason}`); this.done(); return p;
+  }
+
+  /* ---------- receipts ---------- */
+  _receipt(p) {
+    const pre = { admission: 'ADM', fees: 'FEE', salary: 'SAL' }[p.kind], c = this.d.meta.counters; c[p.kind] = (c[p.kind] || 0) + 1;
+    const no = `BGS-${pre}-${String(c[p.kind]).padStart(5, '0')}`; const now = new Date();
+    const rec = { id: no, receiptNo: no, date: R.localISO(now), ts: now.toISOString(), method: p.method || 'Cash', receivedBy: 'Headteacher', ...p };
+    this.d.payments[no] = rec; this.touch('payments', no); this.log('receipt', `${no} ${rec.amount}`); return rec;
+  }
+
+  /* ---------- term control ---------- */
+  setCurrentTerm(year, term) {
+    year = Number(year); term = Number(term); if (![1, 2, 3].includes(term) || year < 2020 || year > 2100) fail('Invalid year/term.');
+    this.d.meta.current = { year, term }; this.log('current term', `${year} T${term}`);
+    for (const s of Object.values(this.d.students)) if (s.status === 'active') this.bill(s, year, term);   // new term bills use today's class & day/boarding type
+    this.touch('meta', 'current'); this.done(); return this.d.meta.current;
+  }
+
+  /* ---------- marks from teachers (read-only on this PC) ---------- */
+  nextSeq() { return ++this.d.meta.seq; }
+  acceptMarks(marks = [], comments = [], device = '') {
+    let a = 0;
+    for (const m of marks) {
+      if (!m || !m.id || !m.studentId || typeof m.at !== 'string') continue;
+      if (!m.cleared && !m.absent && !(Number.isFinite(m.score) && m.score >= 0 && m.score <= R.MAX_MARK)) continue;
+      const old = this.d.marks[m.id]; if (old && old.at > m.at) continue;
+      this.d.marks[m.id] = { id: m.id, year: +m.year, term: +m.term, exam: m.exam, studentId: m.studentId, className: m.className, subject: m.subject, score: m.cleared || m.absent ? null : m.score, absent: !!m.absent, cleared: !!m.cleared, by: String(m.by || device).slice(0, 60), at: m.at, seq: this.nextSeq() };
+      this.touch('marks', m.id); a++;
+    }
+    for (const c of comments) {
+      if (!c || !c.id || typeof c.at !== 'string') continue;
+      const old = this.d.comments[c.id]; if (old && old.at > c.at) continue;
+      this.d.comments[c.id] = { id: c.id, teacher: String(c.teacher ?? '').slice(0, 600), head: String(c.head ?? '').slice(0, 600), at: c.at, seq: this.nextSeq() }; this.touch('comments', c.id); a++;
+    }
+    if (a) this.done(false); return a;
+  }
+  saveHeadRemark(id, teacher, head) { this.acceptMarks([], [{ id, teacher, head, at: nowISO() }]); this.s.save(true); }
+  marksFor(year) { return Object.values(this.d.marks).filter(m => m.year === Number(year)); }
+  getMarks(year) { return { marks: this.marksFor(year), comments: Object.values(this.d.comments).filter(c => c.id.startsWith(year + '|')), students: Object.values(this.d.students).map(s => ({ id: s.id, first: s.first, last: s.last, className: s.className, status: s.status })) }; }
+  teacherSnapshot(since) {
+    since = Number(since) || 0;
+    return { current: this.cur(), students: Object.values(this.d.students).filter(s => s.status !== 'pending').map(s => ({ id: s.id, first: s.first, last: s.last, className: s.className, status: s.status, year: this.cur().year })),
+      marks: Object.values(this.d.marks).filter(m => m.seq > since), comments: Object.values(this.d.comments).filter(c => c.seq > since), maxSeq: this.d.meta.seq };
+  }
+}
+module.exports = { HM, Fail, DEFAULTS };
