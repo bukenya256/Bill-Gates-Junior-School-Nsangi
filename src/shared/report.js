@@ -79,7 +79,7 @@ const remarkBody = t => (t && t.trim() ? `<p>${esc(t)}</p>` : '<div class="rc-li
 const gradeKey = () => GRADES.map((g, i) => `<span><b>${g.g}</b> ${i === 0 ? g.min + '–100' : g.min + '–' + (GRADES[i - 1].min - 1)} ${g.label}</span>`).join('');
 
 function schoolHead(cls) {
-  return `<div class="${cls}"><div class="rc-crest">${CREST_SVG}</div><div class="rc-school"><h1>${esc(SCHOOL.name.toUpperCase())}</h1><p>${esc(SCHOOL.address)}</p></div></div>`;
+  return `<div class="${cls}"><div class="rc-crest">${CREST_SVG}</div><div class="rc-school"><h1>${esc(SCHOOL.name.toUpperCase())}</h1><p>Excellence in Learning</p></div></div>`;
 }
 
 /** One student's report card (one A4 page). res = result row from the app; ctx = {term, year, exam, classSize} */
@@ -93,7 +93,7 @@ function reportCardHTML(res, ctx, comments) {
   }).join('');
   const missing = res.of - res.entered;
   return `<section class="rc-page">
-  <div class="rc-head"><div class="rc-crest">${CREST_SVG}</div><div class="rc-school"><h1>${esc(SCHOOL.name.toUpperCase())}</h1><p>${esc(SCHOOL.address)}</p></div><div class="rc-year"><small>YEAR</small>${ctx.year}</div></div>
+  <div class="rc-head"><div class="rc-crest">${CREST_SVG}</div><div class="rc-school"><h1>${esc(SCHOOL.name.toUpperCase())}</h1><p>Excellence in Learning</p></div><div class="rc-year"><small>YEAR</small>${ctx.year}</div></div>
   <div class="rc-title">STUDENT REPORT CARD &nbsp;·&nbsp; ${esc(ctx.exam.name.toUpperCase())} &nbsp;·&nbsp; ${esc(ctx.term.name.toUpperCase())}</div>
   <div class="rc-info"><div class="wide"><small>Student name</small><b>${esc(st.first + ' ' + st.last)}</b></div><div class="wide"><small>Admission No.</small><b>${esc(st.id)}</b></div><div><small>Class</small><b>${esc(st.className)}</b></div><div><small>Class size</small><b>${ctx.classSize}</b></div></div>
   <table class="rc-table"><thead><tr><th>Subject</th><th class="c">Marks / ${MAX_MARK}</th><th class="c">Grade</th><th>Remark</th></tr></thead><tbody>${rows}</tbody>
@@ -104,7 +104,7 @@ function reportCardHTML(res, ctx, comments) {
     <div class="rc-cbox"><small>Class teacher's remark</small>${remarkBody(cm.teacher)}</div>
     <div class="rc-cbox"><small>Head teacher's remark</small>${remarkBody(cm.head)}<div class="rc-sign"><span>Head teacher's signature &amp; stamp: ....................................................................</span></div></div>
   </div>
-  <div class="rc-decision"><strong>END-OF-YEAR CLASS DECISION</strong><div class="rc-decision-options"><span class="rc-decision-choice"><span class="rc-decision-box"></span> Promoted</span><span class="rc-decision-choice"><span class="rc-decision-box"></span> Repeat Class</span></div></div>
+  ${ctx.term.name === 'Term 3' ? (() => { const p=(ctx.promotions||[]).find(x=>x.studentId===st.id && x.year===ctx.year); return `<div class="rc-decision"><strong>END-OF-YEAR CLASS DECISION</strong><div class="rc-decision-options"><span class="rc-decision-choice"><span class="rc-decision-box">${p?.decision==='promoted'?'✓':''}</span> Promoted</span><span class="rc-decision-choice"><span class="rc-decision-box">${p?.decision==='repeat'?'✓':''}</span> Repeat Class</span></div></div>`; })() : ''}
   <div class="rc-key"><b>Grading:</b>${gradeKey()}</div>
   <div class="rc-foot">${esc(SCHOOL.name)} · ${esc(ctx.term.name)} ${ctx.year} · Printed ${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</div>
   </section>`;

@@ -14,7 +14,7 @@ function createApp({ dataDir, backupDir, notify = () => { }, enc = { enc: s => s
     if (!A.hm) throw new Fail('Not the Headteacher PC.');
     A.hm.s.save(true); fs.mkdirSync(backupDir, { recursive: true });
     const d = new Date(), p = n => String(n).padStart(2, '0');
-    const f = path.join(backupDir, `bgs-backup-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${auto ? '-auto' : ''}.json`);
+    const f = path.join(backupDir, `bgs-backup-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}-${String(d.getMilliseconds()).padStart(3,'0')}${auto ? '-auto' : ''}.json`);
     fs.copyFileSync(path.join(dataDir, 'hm-data.json'), f);
     const all = fs.readdirSync(backupDir).filter(x => x.startsWith('bgs-backup-')).sort(); while (all.length > 40) fs.unlinkSync(path.join(backupDir, all.shift()));
     return f;
@@ -46,7 +46,28 @@ function createApp({ dataDir, backupDir, notify = () => { }, enc = { enc: s => s
     'settings.get': () => { const hm = needHM(); return { lan: { ips: lanIps(), port, key: hm.d.meta.lanKey, error: A.server && A.server.lastError }, cloud: { url: cfg.cloud ? cfg.cloud.url : '', hasKey: !!(cfg.cloud && cfg.cloud.key), status: A.cloud.status() }, backupDir, dataDir }; },
     'settings.cloud': ({ url, key }) => { needHM(); cfg.cloud = { url: String(url || '').trim(), key: key ? enc.enc(String(key).trim()) : (cfg.cloud ? cfg.cloud.key : '') }; if (!cfg.cloud.url) cfg.cloud = null; saveCfg(); A.cloud.st.error = ''; A.cloud.kick(); return true; },
     'cloud.test': async () => { needHM(); await A.cloud.test(); return true; },
-    'cloud.pushAll': async () => { needHM(); await A.cloud.flush(true); return A.cloud.status(); },
+     'cloud.pushAll': async () => { needHM(); if (!Object.keys(A.hm.d.students).length) throw new Fail('Cannot push an empty school database. Use Restore from Supabase first.'); await A.cloud.flush(true); return A.cloud.status(); },
+    'cloud.previewRestore': async () => { needHM(); const rows=await A.cloud.download(); const r=A.cloud.buildRecovery(rows); return {records:r.valid,counts:r.counts,year:r.data.meta.current.year,term:r.data.meta.current.term}; },
+    'cloud.restore': async ({confirm}) => {
+      const hm=needHM(); if(confirm!=='RESTORE SCHOOL') throw new Fail('Type RESTORE SCHOOL to confirm.');
+      if(A.cloud.busy) throw new Fail('Cloud synchronization is running. Please try again.');
+      // Stop automatic cloud writes during the entire operation.
+      A.cloud.stop(); A.cloud.busy=true;
+      try {
+        const rows=await A.cloud.download(), r=A.cloud.buildRecovery(rows);
+        const existing=hm.d;
+        // Cloud deliberately never contains the HM password, preserve the local replacement-PC login.
+        r.data.meta.pw=existing.meta.pw;
+        r.data.meta.lanKey=existing.meta.lanKey;
+        r.data.meta.createdAt=existing.meta.createdAt;
+        r.data.meta.seq=Math.max(0,...Object.values(r.data.marks).map(m=>Number(m.seq)||0),...Object.values(r.data.comments).map(m=>Number(m.seq)||0));
+        r.data.dirty={};
+        backupNow(false); // unconditionally save current data to an independent dated backup
+        hm.s.data=r.data; hm.d=r.data; hm.s.save(true);
+        A.cloud.st.error=''; A.cloud.st.last=new Date().toISOString();
+        return {records:r.valid,counts:r.counts};
+      } finally {A.cloud.busy=false; A.cloud.loop=setInterval(()=>A.cloud.flush(),60000); A.cloud.refresh(); notify('changed');}
+    },
     'backup.now': () => ({ file: backupNow(false) }),
     'settings.newKey': () => { const hm = needHM(); hm.d.meta.lanKey = require('crypto').randomBytes(4).toString('hex').toUpperCase().replace(/(.{4})/, '$1-'); hm.done(); return hm.d.meta.lanKey; },
     'app.reset': () => { if (A.hm) needHM(); cfg.mode = null; saveCfg(); return { restart: true }; },
@@ -58,6 +79,7 @@ function createApp({ dataDir, backupDir, notify = () => { }, enc = { enc: s => s
     'hm.updateStudent': a => needHM().updateStudent(a.id, a.f),
     'hm.setType': a => needHM().setType(a.id, a.type),
     'hm.setStudentStatus': a => needHM().setStudentStatus(a.id, a.status, a.reason),
+    'hm.addDiscipline': a => needHM().addDiscipline(a),
     'hm.payFees': a => needHM().payFees(a.id, a.year, a.term, a.amount, a.method, a.note),
     'hm.addStaff': f => needHM().addStaff(f),
     'hm.updateStaff': a => needHM().updateStaff(a.id, a.f),
@@ -71,6 +93,7 @@ function createApp({ dataDir, backupDir, notify = () => { }, enc = { enc: s => s
     't.setConfig': c => { needT().setConfig(c); return true; },
     't.setMark': m => needT().setMark(m),
     't.setComment': a => { needT().setComment(a.id, a.teacher, a.head); return true; },
+    't.setPromotion': a => needT().setPromotion(a),
     't.syncNow': async () => { await needT().sync(); return true; },
   };
   return {

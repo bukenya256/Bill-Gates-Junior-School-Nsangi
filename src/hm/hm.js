@@ -1,6 +1,6 @@
 'use strict';
 const S = { page: 'dashboard', year: null, term: null, period: null, d: null, sync: null, f: { q: '', cls: '', st: 'active', ty: '', fee: '', rcpt: 'all', adm: 'pending', from: '', to: '' } };
-const NAV = [['dashboard', '🏠', 'Dashboard'], ['g1', 'School'], ['applications', '📝', 'Applications'], ['students', '🎓', 'Students'], ['fees', '💰', 'School Fees'], ['staff', '👩‍🏫', 'Staff & Salaries'], ['receipts', '🧾', 'Receipts'], ['g2', 'Academics'], ['reports', '📊', 'Academic Reports'], ['g3', 'System'], ['settings', '⚙️', 'Settings & Backup']];
+const NAV = [['dashboard', '🏠', 'Dashboard'], ['g1', 'School'], ['applications', '📝', 'Applications'], ['students', '🎓', 'Students'], ['classes', '🏫', 'Classes'], ['discipline', '⚖️', 'Discipline'], ['fees', '💰', 'School Fees'], ['staff', '👩‍🏫', 'Staff & Salaries'], ['receipts', '🧾', 'Receipts'], ['g2', 'Academics'], ['reports', '📊', 'Academic Reports'], ['g3', 'System'], ['settings', '⚙️', 'Settings & Backup']];
 let reportsView = null;
 const root = $('#root');
 const termTxt = (y, t) => `Term ${t} ${y}`;
@@ -107,6 +107,29 @@ const PAGES = {
     bindSearch('q', 'q', draw); $('#fc').onchange = e => { f.cls = e.target.value; draw(); }; $('#fy').onchange = e => { f.ty = e.target.value; draw(); }; $('#fs').onchange = e => { f.st = e.target.value; draw(); }; draw();
   },
 
+  classes() {
+    const list = S.d.students.filter(s=>s.status !== 'pending' && (S.year < S.d.current.year || s.status !== 'inactive'));
+    const select = S.f.cls || CLASSES[0];
+    const records = list.filter(s => (s.classHistory && s.classHistory[S.year] || s.className) === select);
+    page(`${head('Classes — Year ' + S.year)}<div class="classgrid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:9px;margin-bottom:15px">${CLASSES.map(c=>`<button data-classcard="${esc(c)}" class="card" style="cursor:pointer;text-align:left;padding:12px"><b>${esc(c)}</b><span class="sub">${list.filter(s=>(s.classHistory?.[S.year]||s.className)===c).length} student(s)</span></button>`).join('')}</div><div class="bar"><label>Choose class</label><select id="classpick">${CLASSES.map(c=>`<option ${select === c ? 'selected' : ''}>${c}</option>`).join('')}</select><span class="muted">${records.length} active students</span></div>
+    <div class="card"><h3>${esc(select)} · ${S.year}</h3>${records.length ? `<table class="t"><thead><tr><th>Admission no.</th><th>Student</th><th>Day / Boarding</th><th>Status</th></tr></thead><tbody>${records.map(s=>`<tr><td>${esc(s.id)}</td><td>${esc(s.first + ' ' + s.last)}</td><td>${typeLabel(s.type)}</td><td>${stChip(s)}</td></tr>`).join('')}</tbody></table>` : '<div class="empty">No active students in this class.</div>'}</div>`);
+    $('#classpick').onchange = e=>{S.f.cls=e.target.value;PAGES.classes();}; $$('[data-classcard]').forEach(b=>b.onclick=()=>{S.f.cls=b.dataset.classcard;PAGES.classes();});
+  },
+  discipline() {
+    const sList = S.d.students.filter(s=>s.status !== 'pending');
+    const rows = S.d.discipline || [];
+    page(`${head('Disciplinary Records','<button class="pri" id="newdiscipline">＋ Record case</button>')}<div class="banner info">Record suspension or expulsion with a reason. Records are retained permanently; expulsion makes a student inactive without deleting admission or payment history.</div><div class="card">${rows.length ? `<table class="t"><thead><tr><th>Date</th><th>Student</th><th>Class</th><th>Decision</th><th>Reason</th><th>Return date</th><th>Letter</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${esc(r.date)}</td><td>${esc(r.studentName)}<span class="sub">${esc(r.studentId)}</span></td><td>${esc(r.className)}</td><td>${chip(r.action.toUpperCase(),r.action === 'expulsion'?'red':'amber')}</td><td>${esc(r.reason)}</td><td>${esc(r.end || '—')}</td><td><button class="sm" data-letter="${esc(r.id)}">Print notice</button></td></tr>`).join('')}</tbody></table>`:'<div class="empty">No disciplinary cases recorded.</div>'}</div>`);
+    $$('[data-letter]').forEach(b=>b.onclick=()=>{
+      const r=rows.find(x=>x.id===b.dataset.letter);if(!r)return;
+      const body=`<main style="font:15px/1.8 Georgia,serif;max-width:175mm;margin:12mm auto;color:#15263e"><header style="text-align:center;border-bottom:3px double #172c50;padding-bottom:12px"><h2 style="margin:0">BILL GATES JUNIOR SCHOOL NSANGI</h2><small>OFFICIAL DISCIPLINARY NOTICE</small></header><p>Date: ${esc(r.date)}</p><p>To: Parent / Guardian of <b>${esc(r.studentName)}</b><br>Admission No.: ${esc(r.studentId)}<br>Class: ${esc(r.className)}</p><h3>RE: NOTICE OF ${esc(r.action.toUpperCase())}</h3><p>Dear Parent / Guardian,</p><p>This letter formally notifies you that ${esc(r.studentName)} has been ${r.action === 'suspension' ? 'suspended' : 'expelled'} from Bill Gates Junior School Nsangi.</p><p><b>Reason:</b> ${esc(r.reason)}</p><p><b>Effective date:</b> ${esc(r.date)}${r.end?`<br><b>Return date:</b> ${esc(r.end)}`:''}</p><p>Please contact the school administration for further guidance.</p><p style="margin-top:35px">Yours faithfully,<br>________________________<br>School Administration</p></main>`;
+      printRaw(body,'@page{size:A4;margin:15mm}body{margin:0}', 'Disciplinary notice');
+    });
+    $('#newdiscipline').onclick = ()=>{
+      const m=modal('Record disciplinary action',`<form id="disciplineForm"><div class="field"><label>Student</label><select name="studentId">${sList.map(s=>`<option value="${esc(s.id)}">${esc(s.first+' '+s.last)} — ${esc(s.className)} (${esc(s.id)})</option>`).join('')}</select></div><div class="grid2"><div class="field"><label>Decision</label><select name="action"><option value="suspension">Suspension</option><option value="expulsion">Expulsion</option></select></div><div class="field"><label>Date</label><input type="date" name="date" value="${localISO()}"></div><div class="field"><label>Suspension return date (if applicable)</label><input type="date" name="end"></div></div><div class="field"><label>Reason *</label><textarea name="reason" required maxlength="1200"></textarea></div><div class="field"><label>Additional notes</label><textarea name="notes" maxlength="1200"></textarea></div><div class="mf"><button type="button" data-x2>Cancel</button><button class="pri" type="submit">Save case</button></div></form>`);
+      $('[data-x2]',m).onclick=closeModal;
+      $('#disciplineForm').onsubmit=e=>{e.preventDefault();run(async()=>{const f=Object.fromEntries(new FormData(e.target));if(f.action==='expulsion'&&!confirm('Expel this student and mark them inactive?'))return;await api('hm.addDiscipline',f);closeModal();toast('Disciplinary case saved');refresh();});};
+    };
+  },
   /* ================= School fees ================= */
   fees() {
     const draw = () => {
@@ -180,7 +203,7 @@ const PAGES = {
     <p>Address: ${st.lan.ips.length ? st.lan.ips.map(i => `<code>${i}:${st.lan.port}</code>`).join(' ') : '<span class="owe">No network found – connect to WiFi / cable</span>'}</p><p>School key: <span class="keybox">${esc(st.lan.key)}</span> <button class="sm" id="newkey">Make a new key</button></p>${st.lan.error ? `<p class="err">Server problem: ${esc(st.lan.error)}</p>` : ''}</div>
     <div class="card"><h3>Cloud backup</h3><p class="muted">Every change (marks, payments, receipts, students, staff) is sent to your cloud database straight away. If the internet is down, changes wait safely on this PC and are sent when it returns.</p>
     <div class="grid2"><div class="field"><label>Cloud address (Supabase Project URL)</label><input id="cu" placeholder="https://xxxxxxxx.supabase.co" value="${esc(st.cloud.url)}"></div><div class="field"><label>Secret key (service_role) ${st.cloud.hasKey ? '— saved ✓ (leave empty to keep)' : ''}</label><input id="ck" type="password" placeholder="${st.cloud.hasKey ? '••••••••' : 'Paste key'}"></div></div>
-    <div class="bar"><button class="pri" id="csave">Save cloud settings</button><button id="ctest">Test connection</button><button id="cpush">Send everything now</button><span id="cst"></span></div>
+    <div class="bar"><button class="pri" id="csave">Save cloud settings</button><button id="ctest">Test connection</button><button id="cpush">Send everything now</button><button id="crestore">☁ Restore from Supabase…</button><span id="cst"></span></div>
     <details><summary>How to set up the free cloud database (once, ~5 minutes)</summary><ol><li>Go to <b>supabase.com</b> → create a free account → “New project” (pick a region close to you, e.g. Europe/Frankfurt or South Africa).</li><li>Open <b>SQL Editor</b>, paste the text below, press Run.</li><li>Open <b>Project Settings → API</b>. Copy the <b>Project URL</b> and the <b>service_role</b> key into the boxes above. Keep that key private.</li></ol><pre id="sql">create table if not exists records (
   key text primary key,
   collection text not null,
@@ -196,6 +219,13 @@ alter table records enable row level security;</pre><button class="sm" id="cpsql
     $('#csave').onclick = () => run(async () => { await api('settings.cloud', { url: $('#cu').value, key: $('#ck').value }); toast('Saved'); $('#ck').value = ''; });
     $('#ctest').onclick = () => run(async () => { await api('settings.cloud', { url: $('#cu').value, key: $('#ck').value }); await api('cloud.test'); toast('✓ Cloud connection works'); });
     $('#cpush').onclick = () => run(async () => { toast('Sending…'); S.sync = await api('cloud.pushAll'); paintCloudSt(); toast(S.sync.error ? S.sync.error : '✓ Everything is in the cloud', !!S.sync.error); });
+    $('#crestore').onclick = () => run(async () => {
+      const info=await api('cloud.previewRestore');
+      const n=Object.entries(info.counts).map(([k,v])=>`${esc(k)}: <b>${v}</b>`).join(' · ');
+      const m=modal('Restore school records from Supabase',`<div class="banner">The cloud has ${info.records} records, academic year ${info.year}, Term ${info.term}.</div><p>${n}</p><p><b>Warning:</b> This replaces the Headteacher PC's local records. The current local database is saved first. Ensure the Teachers' PC is disconnected until recovery is verified.</p><div class="field"><label>Type RESTORE SCHOOL to confirm</label><input id="confirmrestore" autocomplete="off"></div><div class="mf"><button data-x2>Cancel</button><button class="danger" id="applyrestore">Restore cloud records</button></div>`);
+      $('[data-x2]',m).onclick=closeModal;
+      $('#applyrestore').onclick=()=>run(async()=>{const r=await api('cloud.restore',{confirm:$('#confirmrestore').value});closeModal();toast('Restored '+r.records+' cloud records. Verify totals before continuing.');await refresh();});
+    });
     $('#cpsql').onclick = () => { navigator.clipboard.writeText($('#sql').textContent); toast('SQL copied'); };
     $('#bnow').onclick = () => run(async () => { const r = await api('backup.now'); toast('Saved: ' + r.file); });
     $('#brest').onclick = () => run(() => api('backup.restore'));

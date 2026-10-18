@@ -1,6 +1,6 @@
 'use strict';
 /* ===== School rules shared by the Headteacher PC and the Teachers' PC ===== */
-const SCHOOL = { name: 'Bill Gates Junior School Nsangi', address: 'Nsangi Trading Centre, Masaka Road' };
+const SCHOOL = { name: 'Bill Gates Junior School Nsangi', address: 'Nsangi' };
 const CLASSES = ['Baby Class', 'Middle Class', 'Top Class', 'P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7'];
 const NURSERY = ['Baby Class', 'Middle Class', 'Top Class'];
 const LOWER = ['P1', 'P2', 'P3', 'P4'];

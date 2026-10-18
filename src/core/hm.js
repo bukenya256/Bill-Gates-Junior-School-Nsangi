@@ -4,7 +4,7 @@ const R = require('../shared/rules');
 
 const DEFAULTS = {
   meta: { createdAt: null, pw: null, lanKey: null, counters: {}, current: null, seq: 0, admSeq: {} },
-  students: {}, staff: {}, payments: {}, bills: {}, salaryBills: {}, marks: {}, comments: {}, audit: [], dirty: {},
+  students: {}, staff: {}, payments: {}, bills: {}, salaryBills: {}, marks: {}, comments: {}, discipline: {}, promotions: {}, audit: [], dirty: {},
 };
 const nowISO = () => new Date().toISOString();
 class Fail extends Error {}
@@ -87,7 +87,7 @@ class HM {
       return { ...w, period: { key: period, demand, paid, balance: Math.max(0, demand - paid) } };
     }).sort((a, b) => (a.last + a.first).localeCompare(b.last + b.first));
     const payments = Object.values(this.d.payments).sort((a, b) => b.ts.localeCompare(a.ts));
-    return { school: R.SCHOOL, current: c, view: { year, term, period }, students, staff, payments, lanKey: this.d.meta.lanKey, seq: this.d.meta.seq };
+    return { school: R.SCHOOL, current: c, view: { year, term, period }, students, staff, payments, discipline: Object.values(this.d.discipline).sort((a,b)=>b.at.localeCompare(a.at)), promotions: Object.values(this.d.promotions), lanKey: this.d.meta.lanKey, seq: this.d.meta.seq };
   }
 
   /* ---------- admissions & students ---------- */
@@ -139,6 +139,33 @@ class HM {
     s.status = status; s.statusNote = String(reason || '').trim(); s.statusChangedOn = R.localISO();
     if (status === 'active') this.bill(s, this.cur().year, this.cur().term);
     this.touch('students', sid); this.log('student ' + status, `${sid} ${s.statusNote}`); this.done(); return s;
+  }
+
+  addDiscipline({ studentId, action, reason, date, end, notes }) {
+    const s = this.d.students[studentId] || fail('Student not found.');
+    if (!['suspension', 'expulsion'].includes(action)) fail('Choose suspension or expulsion.');
+    if (!String(reason || '').trim()) fail('Give the disciplinary reason.');
+    if (action === 'suspension' && end && end < (date || R.localISO())) fail('Suspension return date must not precede the start date.');
+    const id = crypto.randomUUID();
+    const rec = { end: action === 'suspension' ? (end || '') : '', id, studentId, studentName: s.first + ' ' + s.last, className: s.className, action, reason: String(reason).trim().slice(0,1200), notes: String(notes || '').trim().slice(0,1200), date: date || R.localISO(), at: nowISO(), recordedBy: 'Headteacher' };
+    this.d.discipline[id] = rec; this.touch('discipline', id);
+    if (action === 'expulsion') { s.status = 'inactive'; s.statusNote = 'Expelled: ' + rec.reason; s.statusChangedOn = rec.date; this.touch('students', s.id); }
+    // Suspension is a recorded temporary action, not an irreversible deletion or expulsion.
+    this.log('disciplinary ' + action, `${s.id}: ${rec.reason}`); this.done(); return rec;
+  }
+  recordPromotion({studentId, year, term, decision, by}) {
+    const s = this.d.students[studentId] || fail('Student not found.');
+    year = Number(year); term = Number(term);
+    if (term !== 3 || year < 2026 || year > 2099) fail('Promotion decisions are for Term 3 only.');
+    if (!['promoted','repeat'].includes(decision)) fail('Choose Promoted or Repeat Class.');
+    if (s.status !== 'active') fail('Only active students can receive a promotion decision.');
+    if (year !== this.cur().year || this.cur().term !== 3) fail('Promotion decisions must be for the current academic year in Term 3.');
+    if (!Object.values(this.d.marks).some(m => m.studentId === studentId && m.year === year && m.term === 3 && m.exam === 'EOT' && !m.cleared)) fail('Record Term 3 End of Term exam marks before making a promotion decision.');
+    const key = `${year}|${studentId}`;
+    const rec = { key, studentId, year, term: 3, className: s.className, decision, by: String(by || 'Director of Studies').slice(0,80), at: nowISO(), applied: false };
+    const old = this.d.promotions[key];
+    if (old && old.applied) fail('This promotion has already been applied.');
+    this.d.promotions[key] = rec; this.touch('promotions', key); this.log('promotion decision', `${studentId}: ${decision} for ${year}`); this.done(); return rec;
   }
 
   /* ---------- school fees ---------- */
@@ -203,6 +230,25 @@ class HM {
   /* ---------- term control ---------- */
   setCurrentTerm(year, term) {
     year = Number(year); term = Number(term); if (![1, 2, 3].includes(term) || year < 2020 || year > 2100) fail('Invalid year/term.');
+    const previous = this.cur();
+    if (R.termIdx(year,term) < R.termIdx(previous.year,previous.term)) fail('Cannot roll back the current term. Use the year and term selectors to view historical records.');
+    if (year > previous.year) {
+      if (term !== 1 || year !== previous.year + 1 || previous.term !== 3) fail('Finish Term 3 and start the next academic year at Term 1.');
+      // Only recorded decisions move pupils. Others remain in the same class pending review.
+      for (const s of Object.values(this.d.students)) {
+        const rec = this.d.promotions[`${previous.year}|${s.id}`];
+        if (!rec || rec.applied || s.status !== 'active') continue;
+        if (rec.decision === 'promoted') {
+          const i = R.CLASSES.indexOf(s.className);
+          if (i >= 0 && i < R.CLASSES.length - 1) s.className = R.CLASSES[i + 1];
+          else if (i === R.CLASSES.length - 1) { s.status = 'inactive'; s.statusNote = 'Completed Primary 7'; }
+        }
+        s.classHistory = s.classHistory || {};
+        s.classHistory[previous.year] = rec.className;
+        s.classHistory[year] = s.className;
+        rec.applied = true; rec.appliedAt = nowISO(); this.touch('promotions', rec.key); this.touch('students', s.id);
+      }
+    }
     this.d.meta.current = { year, term }; this.log('current term', `${year} T${term}`);
     for (const s of Object.values(this.d.students)) if (s.status === 'active') this.bill(s, year, term);   // new term bills use today's class & day/boarding type
     this.touch('meta', 'current'); this.done(); return this.d.meta.current;
@@ -228,11 +274,11 @@ class HM {
   }
   saveHeadRemark(id, teacher, head) { this.acceptMarks([], [{ id, teacher, head, at: nowISO() }]); this.s.save(true); }
   marksFor(year) { return Object.values(this.d.marks).filter(m => m.year === Number(year)); }
-  getMarks(year) { return { marks: this.marksFor(year), comments: Object.values(this.d.comments).filter(c => c.id.startsWith(year + '|')), students: Object.values(this.d.students).map(s => ({ id: s.id, first: s.first, last: s.last, className: s.className, status: s.status })) }; }
+  getMarks(year) { return { marks: this.marksFor(year), comments: Object.values(this.d.comments).filter(c => c.id.startsWith(year + '|')), promotions: Object.values(this.d.promotions).filter(p => p.year === Number(year)), students: Object.values(this.d.students).map(s => ({ id: s.id, first: s.first, last: s.last, className: s.className, classHistory: s.classHistory || {}, status: s.status })) }; }
   teacherSnapshot(since) {
     since = Number(since) || 0;
-    return { current: this.cur(), students: Object.values(this.d.students).filter(s => s.status !== 'pending').map(s => ({ id: s.id, first: s.first, last: s.last, className: s.className, status: s.status, year: this.cur().year })),
-      marks: Object.values(this.d.marks).filter(m => m.seq > since), comments: Object.values(this.d.comments).filter(c => c.seq > since), maxSeq: this.d.meta.seq };
+    return { current: this.cur(), students: Object.values(this.d.students).filter(s => s.status !== 'pending').map(s => ({ id: s.id, first: s.first, last: s.last, className: s.className, classHistory: s.classHistory || {}, status: s.status, year: this.cur().year })),
+      promotions: Object.values(this.d.promotions), marks: Object.values(this.d.marks).filter(m => m.seq > since), comments: Object.values(this.d.comments).filter(c => c.seq > since), maxSeq: this.d.meta.seq };
   }
 }
 module.exports = { HM, Fail, DEFAULTS };

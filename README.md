@@ -28,9 +28,13 @@
 
 ## Cloud (recommended: Supabase – free tier, Postgres, works well from Uganda)
 Settings & Backup → "How to set up…" has the exact steps and SQL. Paste Project URL + `service_role` key, press **Test connection**.
-Note: the cloud holds a complete, readable copy of every record (students, fees, salaries, marks, receipts). Restoring from it is currently a manual job (export the `records` table); local backups restore with one button.
+Note: the cloud holds a complete, readable copy of every record (students, fees, salaries, marks, receipts). Restore from Supabase is now available in Settings & Backup with a preview, validation and safety backup. Test on a spare PC first.
 
 ## Known limits (v1)
 - Not tested on real Windows PCs by the builder – please test both PCs on your network before real use.
 - Only one HM PC is the master. Class promotion at year end is done manually (Students → Edit → Class), and fees follow the new class automatically.
 - Teacher-entered marks are accepted for any term/year (no term locking).
+
+
+## New in 1.1.0
+See `CHANGES_2026_RECOVERY_AND_PROMOTIONS.md` for cloud restoration, class rosters, discipline records, year-end promotions and print updates.

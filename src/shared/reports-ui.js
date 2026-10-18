@@ -35,7 +35,7 @@ function ReportsView(root, P) {
     $$('[data-pv]', root).forEach(b => b.onclick = () => preview(+b.dataset.pv));
   }
   const cm = r => { const c = S.data.comments.find(x => x.id === cmtId(r.st.id)); return c ? { teacher: c.teacher, head: c.head } : defaultRemarks(r.avg); };
-  const ctx = () => ({ term: termObj(), year: S.year, exam: examObj(), classSize: S.results.length, cls: S.cls, subjects: subjectsFor(S.cls) });
+  const ctx = () => ({ term: termObj(), year: S.year, exam: examObj(), classSize: S.results.length, cls: S.cls, subjects: subjectsFor(S.cls), promotions: S.data.promotions || [] });
   const title = () => `${S.cls} ${S.exam} Term ${S.term} ${S.year}`;
   function printCards(one) { const list = one ? [one] : S.results; printHTML(list.map(r => reportCardHTML(r, ctx(), cm(r))).join(''), 'portrait', 'Report cards ' + title()); }
   function printSheet() { printHTML(classSheetHTML(S.results, ctx()), 'landscape', 'Class results ' + title()); }

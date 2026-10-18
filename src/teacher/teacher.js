@@ -1,7 +1,7 @@
 'use strict';
 const T = { page: 'marks', st: null, year: null, term: null, exam: 'BOT', cls: 'P1', subject: null };
 const root = $('#root'); let rv = null;
-const NAV = [['marks', '✏️', 'Enter Marks'], ['reports', '📊', 'Report Cards & Class Results'], ['students', '🎓', 'Student List'], ['conn', '🔗', 'Connection']];
+const NAV = [['marks', '✏️', 'Enter Marks'], ['reports', '📊', 'Report Cards & Class Results'], ['students', '🎓', 'Student List'], ['promotions', '🎓', 'Term 3 Promotions'], ['conn', '🔗', 'Connection']];
 
 async function boot() {
   T.st = await api('t.state');
@@ -54,7 +54,7 @@ const PG = {
   },
   async reports() {
     page('<div id="rv"></div>');
-    rv = ReportsView($('#rv'), { note: 'Print any learner\'s report card, or the whole class results sheet. Reports use the marks saved on this PC.', getData: async y => { const s = await api('t.state'); T.st = s; return { students: s.students, marks: s.marks.filter(m => m.year === y), comments: s.comments.filter(c => c.id.startsWith(y + '|')), current: s.current }; }, saveRemark: (id, teacher, head) => api('t.setComment', { id, teacher, head }) });
+    rv = ReportsView($('#rv'), { note: 'Print any learner\'s report card, or the whole class results sheet. Reports use the marks saved on this PC.', getData: async y => { const s = await api('t.state'); T.st = s; return { students: s.students, marks: s.marks.filter(m => m.year === y), comments: s.comments.filter(c => c.id.startsWith(y + '|')), promotions: s.promotions.filter(p => p.year === y), current: s.current }; }, saveRemark: (id, teacher, head) => api('t.setComment', { id, teacher, head }) });
     await rv.start({ year: T.year, term: T.term });
   },
   students() {
@@ -63,6 +63,13 @@ const PG = {
     page(`<div class="bar"><input type="search" id="q" placeholder="Search student…" value="${esc(T.q || '')}"><select id="fc"><option value="">All classes</option>${CLASSES.map(c => `<option ${c === cls ? 'selected' : ''}>${c}</option>`).join('')}</select><span class="muted">${list.length} students · Year ${T.st.current.year}</span></div>
     ${list.length ? `<table class="t"><thead><tr><th>Admission No.</th><th>Name</th><th>Class</th><th>Year</th></tr></thead><tbody>${list.map(s => `<tr><td>${esc(s.id)}</td><td><b>${esc(s.last)}</b> ${esc(s.first)}</td><td>${esc(s.className)}</td><td>${s.year || T.st.current.year}</td></tr>`).join('')}</tbody></table>` : '<div class="empty">No students yet. Check the Connection page.</div>'}`);
     $('#q').oninput = e => { T.q = e.target.value; PG.students(); const n = $('#q'); n.focus(); n.setSelectionRange(n.value.length, n.value.length); }; $('#fc').onchange = e => { T.fcls = e.target.value; PG.students(); };
+  },
+  promotions() {
+    const st=T.st, yr=st.current.year;
+    const can=st.current.term===3;
+    const list=st.students.filter(s=>s.status==='active');
+    page(`${'<div class="pagehead"><h2>End-of-year promotion decisions</h2></div>'}<div class="banner info">Decisions are recorded during Term 3 of ${yr}. A promoted learner advances at the start of ${yr+1}; Repeat Class stays in the same class. The Headteacher cannot edit examination marks.</div>${!can?'<div class="banner">Promotion decisions are available only when the Headteacher has opened Term 3.</div>':''}<table class="t"><thead><tr><th>Student</th><th>Current class</th><th>Decision</th></tr></thead><tbody>${list.map(s=>{const k=yr+'|'+s.id,rec=(st.promotions||[]).find(r=>r.key===k);return `<tr><td>${esc(s.first+' '+s.last)}<span class="sub">${esc(s.id)}</span></td><td>${esc(s.className)}</td><td><select data-prom="${esc(s.id)}" ${can?'':'disabled'}><option value="">Not decided</option><option value="promoted" ${rec?.decision==='promoted'?'selected':''}>Promoted</option><option value="repeat" ${rec?.decision==='repeat'?'selected':''}>Repeat Class</option></select><span class="muted" data-status="${esc(s.id)}">${rec?rec.applied?'Applied':'Saved':'Pending'}</span></td></tr>`}).join('')}</tbody></table>`);
+    $$('[data-prom]').forEach(e=>e.onchange=async()=>{if(!e.value)return;try{const r=await api('t.setPromotion',{studentId:e.dataset.prom,year:yr,term:3,decision:e.value});T.st.promotions=(T.st.promotions||[]).filter(p=>p.key!==r.key).concat(r);$(`[data-status="${e.dataset.prom}"]`).textContent='Saved · syncing';}catch(err){toast(err.message,true);}});
   },
   conn() {
     const c = T.st.cfg;
