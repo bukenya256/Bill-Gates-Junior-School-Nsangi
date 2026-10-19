@@ -25,18 +25,19 @@ jobs:
       - name: Install Mojave-compatible Electron
         run: npm install --no-save --no-package-lock electron@26.6.10
         
+      
       - name: Build Intel Mac DMG
         shell: bash
-        run: |
-          rm -rf dist
-          npx electron-builder --mac dmg --x64 --config electron-builder-mojave.json --publish never
-
+        env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
-
+        run: |
+          rm -rf dist-mojave
+          npx electron-builder --mac dmg --x64 --config electron-builder-mojave.json --publish never
 
       - name: Upload Mac DMG
         uses: actions/upload-artifact@v4
         with:
           name: BGS-Mojave-Intel-DMG
-          path: dist/*.dmg
+          path: dist-mojave/*.dmg
           if-no-files-found: error
+
