@@ -2,7 +2,13 @@
   "appId": "ug.billgates.school",
   "productName": "BGS School System",
   "directories": {"output": "dist-mojave"},
-  "files": ["src/**/*", "package.json"],
+  "asar": true,
+  "files": [
+    "src/**/*",
+    "package.json",
+    "!dist/**",
+    "!dist-mojave/**"
+  ],
   "mac": {
     "target": ["dmg"],
     "minimumSystemVersion": "10.14.0",

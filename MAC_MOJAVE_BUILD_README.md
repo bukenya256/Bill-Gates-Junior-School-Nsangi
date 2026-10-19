@@ -1,21 +1,24 @@
-# BGS School System — macOS Mojave (Intel) build
+# BGS School System — Intel Mac / macOS Mojave build
 
-This source ZIP includes the original Windows workflow and a **separate** Mac build:
-`.github/workflows/build-mojave.yml`.
+This is a source-code package for GitHub Actions; it is **not** an already compiled DMG.
 
-## Build without using Terminal on your Mac
+## On the GitHub website
 
-1. Extract this ZIP and upload the contents to the root of your BGS GitHub repository. Ensure GitHub shows `.github/workflows/build-mojave.yml` and `electron-builder-mojave.json`.
-2. In **Actions**, choose **Build BGS macOS Mojave DMG**, then **Run workflow** for `main`.
-3. When successful, download **BGS-Mojave-Intel-DMG** under the run's Artifacts.
-4. Unzip the artifact, open the `.dmg`, and drag **BGS School System** to Applications.
-5. For an unsigned app on Mojave, use Finder **Control-click → Open** and accept the warning if you trust the build. Do not disable Gatekeeper system-wide.
+1. Upload/replace all contents of this ZIP in the repository root (not as a nested folder).
+2. In `.github/workflows`, create or replace `build-mac-mojave.yml` with the file included here. Finder may hide `.github`; use GitHub's **Add file → Create new file** if necessary.
+3. If the repository still has an older broken `build-mojave.yml`, delete that obsolete workflow file from GitHub's Code page to avoid duplicate Mac workflows.
+4. Open **Actions → Build BGS macOS Mojave DMG → Run workflow** on `main`.
+5. After the run succeeds, download the `BGS-Mojave-Intel-DMG` artifact ZIP. Inside will be a `.dmg` installer.
 
-## Compatibility and safety
+## Fixes
 
-- The normal app uses Electron **33.2.1**, which does **not** support Mojave. This workflow changes Electron to **26.6.10 only on the temporary Mac build machine**, leaving the Windows lockfile and workflow unchanged.
-- Electron 26 is obsolete and no longer receives modern security fixes. Use only on a trusted computer and private school network; prefer a supported macOS for production and protect Supabase credentials.
-- The DMG is **unsigned and unnotarized**. This is for testing, not an Apple-certified installer.
-- The macOS UI and data layer are untested on real Mojave hardware. A successful build does not guarantee Mojave runtime compatibility; test first with fictional data.
-- The Mac application uses its own local `userData` folder. It does not automatically read or copy a Windows school's local database. Set up the role and connection explicitly, and don't replace your working Headteacher PC database.
-- Do not commit database files, Supabase service-role keys, backups, or `.env` secrets.
+- Uses the dedicated `electron-builder-mojave.json`, not a command-line `-c.files` override that previously excluded `src/main.js`.
+- Explicitly includes the complete `src` tree and verifies `src/main.js` exists inside `app.asar`.
+- Keeps Mac build output in `dist-mojave` and excludes Windows `dist` output from the application.
+- Installs Electron 26.6.10 only during the Mac Actions build. The Windows package-lock and Windows build stay unchanged.
+
+## Compatibility caveats
+
+Electron 26 is the last Electron major supporting macOS 10.14. It is no longer security-supported; use this only on a trusted machine/network and test on the actual Mojave Intel Mac before using real school data. Unsigned/not-notarized DMGs may require Finder Control-click → Open. This workflow has **not** been run here on GitHub; first compilation and actual Mojave operation must still be verified.
+
+Never commit private Supabase service-role keys, local databases, or backups to the repository.
