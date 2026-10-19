@@ -10,12 +10,14 @@ function createApp({ dataDir, backupDir, notify = () => { }, enc = { enc: s => s
   const saveCfg = () => fs.writeFileSync(cfgFile, JSON.stringify(cfg));
   const A = { mode: cfg.mode || null, hm: null, cloud: null, server: null, teacher: null, authed: false, timers: [] };
 
+  let lastBackupContent = null;
   function backupNow(auto) {
     if (!A.hm) throw new Fail('Not the Headteacher PC.');
     A.hm.s.save(true); fs.mkdirSync(backupDir, { recursive: true });
     const d = new Date(), p = n => String(n).padStart(2, '0');
     const f = path.join(backupDir, `bgs-backup-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}-${String(d.getMilliseconds()).padStart(3,'0')}${auto ? '-auto' : ''}.json`);
     fs.copyFileSync(path.join(dataDir, 'hm-data.json'), f);
+    lastBackupContent = fs.readFileSync(path.join(dataDir, 'hm-data.json'), 'utf8');
     const all = fs.readdirSync(backupDir).filter(x => x.startsWith('bgs-backup-')).sort(); while (all.length > 40) fs.unlinkSync(path.join(backupDir, all.shift()));
     return f;
   }
@@ -25,7 +27,7 @@ function createApp({ dataDir, backupDir, notify = () => { }, enc = { enc: s => s
       A.cloud = new Cloud(A.hm, () => cfg.cloud ? { url: cfg.cloud.url, key: enc.dec(cfg.cloud.key) } : null, () => notify('sync'));
       A.server = startServer(A.hm, port);
       try { backupNow(true); } catch (e) { /* backups are best-effort */ }
-      A.timers.push(setInterval(() => { try { backupNow(true); } catch (e) { /* ignore */ } }, 6 * 3600e3));
+      A.timers.push(setInterval(() => { try { A.hm.s.flush(); const current=fs.readFileSync(path.join(dataDir,'hm-data.json'),'utf8'); if(current!==lastBackupContent) backupNow(true); } catch(e) { console.error('Automatic local backup failed:', e.message); } },30000));
       setTimeout(() => A.cloud && A.cloud.flush(), 3000);
     }
     if (A.mode === 'teacher' && !A.teacher) A.teacher = new Teacher(new Store(path.join(dataDir, 'teacher-data.json'), TDEF), () => notify('changed'));
@@ -66,7 +68,7 @@ function createApp({ dataDir, backupDir, notify = () => { }, enc = { enc: s => s
         hm.s.data=r.data; hm.d=r.data; hm.s.save(true);
         A.cloud.st.error=''; A.cloud.st.last=new Date().toISOString();
         return {records:r.valid,counts:r.counts};
-      } finally {A.cloud.busy=false; A.cloud.loop=setInterval(()=>A.cloud.flush(),60000); A.cloud.refresh(); notify('changed');}
+      } finally {A.cloud.busy=false; A.cloud.loop=setInterval(()=>A.cloud.flush(),15000); A.cloud.refresh(); notify('changed');}
     },
     'backup.now': () => ({ file: backupNow(false) }),
     'settings.newKey': () => { const hm = needHM(); hm.d.meta.lanKey = require('crypto').randomBytes(4).toString('hex').toUpperCase().replace(/(.{4})/, '$1-'); hm.done(); return hm.d.meta.lanKey; },
@@ -80,6 +82,7 @@ function createApp({ dataDir, backupDir, notify = () => { }, enc = { enc: s => s
     'hm.setType': a => needHM().setType(a.id, a.type),
     'hm.setStudentStatus': a => needHM().setStudentStatus(a.id, a.status, a.reason),
     'hm.addDiscipline': a => needHM().addDiscipline(a),
+    'hm.cancelDiscipline': a => needHM().cancelDiscipline(a),
     'hm.payFees': a => needHM().payFees(a.id, a.year, a.term, a.amount, a.method, a.note),
     'hm.addStaff': f => needHM().addStaff(f),
     'hm.updateStaff': a => needHM().updateStaff(a.id, a.f),

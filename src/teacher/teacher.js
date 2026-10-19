@@ -1,3 +1,4 @@
+const tabIcon = k => `<img class="tab-icon" src="${({"dashboard":"../assets/dashboard.png","applications":"../assets/applications.png","students":"../assets/students.png","classes":"../assets/classes.jpeg","discipline":"../assets/discipline.png","fees":"../assets/fees.png","staff":"../assets/staff.svg","receipts":"../assets/receipts.png","reports":"../assets/reports.png","settings":"../assets/settings.png","logout":"../assets/logout.png","login":"../assets/login.png","school":"../assets/school.png"})[k] || "../assets/dashboard.png"}" alt="">`;
 'use strict';
 const T = { page: 'marks', st: null, year: null, term: null, exam: 'BOT', cls: 'P1', subject: null };
 const root = $('#root'); let rv = null;
@@ -7,7 +8,7 @@ async function boot() {
   T.st = await api('t.state');
   if (!T.st.cfg.teacher || !T.st.cfg.hm || !T.st.cfg.key) { T.page = 'conn'; }
   T.year = T.st.current.year; T.term = T.st.current.term;
-  root.innerHTML = `<div class="app"><aside class="side"><div class="brand"><i>🎓</i><div>Bill Gates Junior<small>Nsangi · Teachers' PC</small></div></div><nav class="nav" id="nav"></nav>
+  root.innerHTML = `<div class="app"><aside class="side"><div class="brand"><i><img class="school-icon" src="../assets/school.png" alt=""></i><div>Bill Gates Junior<small>Nsangi · Teachers' PC</small></div></div><nav class="nav" id="nav"></nav>
   <div class="bottom"><div id="who" style="color:#9db6d8;font-size:.8rem;padding:0 6px 8px"></div></div></aside><section class="main"><div class="top"><b style="color:var(--navy)" id="ttl"></b><span class="sp"></span><span id="conn"></span></div><div class="page" id="page"></div></section></div>`;
   window.bgs.on(async () => { const was = T.st; T.st = await api('t.state'); paintConn(); if (T.page === 'students' || (T.page === 'reports' && rv)) { if (!$('#modal') && T.page === 'reports') rv.refresh(); else if (T.page === 'students') draw(); } });
   draw();
@@ -18,7 +19,7 @@ function paintConn() {
   $('#who').textContent = T.st.cfg.teacher ? '👤 ' + T.st.cfg.teacher : '';
 }
 function draw() {
-  $('#nav').innerHTML = NAV.map(n => `<button data-p="${n[0]}" class="${T.page === n[0] ? 'on' : ''}"><span>${n[1]}</span>${n[2]}</button>`).join('');
+  $('#nav').innerHTML = NAV.map(n => `<button data-p="${n[0]}" class="${T.page === n[0] ? 'on' : ''}">${tabIcon(n[0])}${n[2]}</button>`).join('');
   $$('#nav button').forEach(b => b.onclick = () => { T.page = b.dataset.p; rv = null; draw(); });
   $('#ttl').textContent = NAV.find(n => n[0] === T.page)[2]; paintConn(); PG[T.page]();
 }

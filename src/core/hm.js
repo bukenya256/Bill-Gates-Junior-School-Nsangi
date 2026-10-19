@@ -153,6 +153,19 @@ class HM {
     // Suspension is a recorded temporary action, not an irreversible deletion or expulsion.
     this.log('disciplinary ' + action, `${s.id}: ${rec.reason}`); this.done(); return rec;
   }
+  cancelDiscipline({id,reason}) {
+    const rec=this.d.discipline[id] || fail('Disciplinary case not found.');
+    if(rec.cancelledAt) fail('This disciplinary action has already been cancelled.');
+    reason=String(reason||'').trim(); if(!reason) fail('Give a reason for cancelling the action.');
+    rec.cancelledAt=nowISO(); rec.cancelReason=reason.slice(0,1200); rec.cancelledBy='Headteacher';
+    this.touch('discipline',id);
+    const s=this.d.students[rec.studentId];
+    if(s && rec.action==='expulsion' && s.status==='inactive' && String(s.statusNote||'').startsWith('Expelled: '+rec.reason)) {
+      s.status='active'; s.statusNote='Expulsion reversed: '+reason.slice(0,250); s.statusChangedOn=R.localISO();
+      this.touch('students',s.id); this.bill(s,this.cur().year,this.cur().term);
+    }
+    this.log('disciplinary action reversed',id+': '+reason); this.done(); return rec;
+  }
   recordPromotion({studentId, year, term, decision, by}) {
     const s = this.d.students[studentId] || fail('Student not found.');
     year = Number(year); term = Number(term);

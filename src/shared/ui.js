@@ -39,7 +39,7 @@ const RECEIPT_CSS = `*{box-sizing:border-box}body{margin:0;font:12px/1.43 "Segoe
 .rw{display:flex;gap:10px;padding:4px 0;border-bottom:1px dotted #aab8c8}.rw span{width:27mm;color:#5b6b80;font-size:10px;text-transform:uppercase;letter-spacing:.05em}.rw b{flex:1}
 .sum{margin:10px 0;border:1px solid #b9c5d6;border-radius:5px}.sum div{display:flex;justify-content:space-between;padding:5px 10px;border-bottom:1px solid #e0e7f1}.sum div:last-child{border:0}
 .sum .big{background:#fff0e1;font-weight:800;font-size:16px;-webkit-print-color-adjust:exact;print-color-adjust:exact}.sum .bal{font-weight:800;color:#b64d19}.sum .bal.zero{color:#12805c}
-.words{font-style:italic;margin:6px 0}.sign{display:flex;justify-content:space-between;margin-top:22px;font-size:11px;color:#44556b}.sign span{border-top:1px solid #44556b;padding-top:3px;min-width:37mm;text-align:center}
+.words{font-style:italic;margin:6px 0}
 .stamp{position:absolute;right:12mm;top:42mm;transform:rotate(-12deg);border:3px solid #12805c;color:#12805c;font-weight:900;font-size:22px;padding:2px 12px;border-radius:6px;opacity:.75;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .void{border-color:#b3262e;color:#b3262e}.foot{text-align:center;color:#8a96a8;font-size:10px;margin-top:8px}@page{size:A4 portrait;margin:10mm}`;
 function receiptHTML(p) {
@@ -55,7 +55,6 @@ function receiptHTML(p) {
   <div class="sum"><div><span>${lab[1]}</span><b>${money(p.due)}</b></div><div><span>${lab[2]}</span><b>${money(p.paidBefore)}</b></div><div class="big"><span>${lab[3]}</span><b>${money(p.amount)}</b></div><div><span>Total paid to date</span><b>${money(p.paidTotal)}</b></div><div class="bal ${p.balance ? '' : 'zero'}"><span>${lab[4]}</span><b>${money(p.balance)}</b></div></div>
   <div class="words">Amount in words: ${esc(words(p.amount))} Uganda shillings only.</div>
   ${p.void ? '<div class="stamp void">CANCELLED</div>' : p.balance ? '' : '<div class="stamp">PAID IN FULL</div>'}
-  <div class="sign"><span>Received by: Headteacher</span><span>${p.kind === 'salary' ? 'Worker\'s signature' : 'Parent / Guardian'}</span></div>
   <div class="foot">Thank you · ${esc(SCHOOL.name)} · Keep this receipt safely</div></div>`;
 }
 function printRaw(body, css, title) {

@@ -1,10 +1,10 @@
 'use strict';
 /** Cloud backup (Supabase REST). Every change marks a record "dirty"; dirty records are pushed immediately, and retried until they succeed. */
 class Cloud {
-  constructor(hm, getCfg, onStatus) { this.hm = hm; this.getCfg = getCfg; this.onStatus = onStatus || (() => { }); this.busy = false; this.timer = null; this.st = { state: 'off', pending: 0, last: null, error: '' }; this.loop = setInterval(() => this.flush(), 60000); this.refresh(); }
+  constructor(hm, getCfg, onStatus) { this.hm = hm; this.getCfg = getCfg; this.onStatus = onStatus || (() => { }); this.busy = false; this.timer = null; this.st = { state: 'off', pending: 0, last: null, error: '' }; this.loop = setInterval(() => this.flush(), 15000); this.refresh(); }
   status() { this.st.pending = Object.keys(this.hm.d.dirty).length; return this.st; }
   refresh() { const c = this.getCfg(); this.st.state = c && c.url && c.key ? (this.st.error ? 'error' : this.status().pending ? 'pending' : 'ok') : 'off'; this.onStatus(this.status()); }
-  kick() { clearTimeout(this.timer); this.timer = setTimeout(() => this.flush(), 800); this.refresh(); }
+  kick() { clearTimeout(this.timer); this.timer = setTimeout(() => this.flush(), 400); this.refresh(); }
   _rec(col, id) {
     const d = this.hm.d;
     if (col === 'audit') return { key: 'audit:all', collection: 'audit', data: d.audit.slice(-500) };
