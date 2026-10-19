@@ -24,14 +24,13 @@ jobs:
 
       - name: Install Mojave-compatible Electron
         run: npm install --no-save --no-package-lock electron@26.6.10
-
+        
       - name: Build Intel Mac DMG
         shell: bash
         run: |
           rm -rf dist
-          npx electron-builder --mac dmg --x64 --publish never \
-            -c.files='["src/**/*","package.json","!dist/**","!node_modules/**/dist/**"]'
-        env:
+          npx electron-builder --mac dmg --x64 --config electron-builder-mojave.json --publish never
+
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
 
