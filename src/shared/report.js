@@ -6,13 +6,13 @@ const REPORT_CSS = `
 .rc-page,.cs-page{font:12px/1.45 "Segoe UI",Arial,Helvetica,sans-serif;color:#14202f;background:#fff}
 .rc-page{width:190mm;min-height:272mm;margin:0 auto;padding:8mm 9mm;border:1.6px solid #0f2747;position:relative;display:flex;flex-direction:column;page-break-after:always;break-after:page}
 .rc-page:last-child,.cs-page:last-child{page-break-after:auto;break-after:auto}
-.rc-head,.cs-head{display:flex;align-items:center;gap:14px;padding-bottom:8px;border-bottom:3px double #0f2747}
-.rc-crest{width:58px;height:58px;border-radius:14px;background:#b3262e;color:#fff;display:grid;place-items:center;flex:0 0 58px}
+.rc-head,.cs-head{display:flex;align-items:center;gap:14px;padding-bottom:8px;border-bottom:3px solid #e77722}
+.rc-crest{width:58px;height:58px;border-radius:14px;background:#e77722;color:#fff;display:grid;place-items:center;flex:0 0 58px}
 .rc-school{flex:1;text-align:center}
-.rc-school h1{margin:0;font-size:19px;letter-spacing:.04em;color:#0f2747;font-weight:800}
+.rc-school h1{margin:0;font-size:20px;letter-spacing:.025em;color:#0f2747;font-weight:800}
 .rc-school p{margin:2px 0 0;color:#44556b;font-size:11px}
 .rc-year{width:58px;text-align:center;font-weight:800;color:#0f2747;font-size:15px;line-height:1.1}.rc-year small{display:block;font-size:8.5px;font-weight:600;color:#6c7b90;letter-spacing:.1em}
-.rc-title{margin:9px 0 8px;background:#0f2747;color:#fff;text-align:center;font-weight:700;letter-spacing:.08em;padding:6px 8px;font-size:12px;border-radius:3px}
+.rc-title{margin:9px 0 8px;background:#12304e;color:#fff;text-align:center;font-weight:700;letter-spacing:.08em;padding:6px 8px;font-size:12px;border-radius:3px}
 .rc-info{display:grid;grid-template-columns:repeat(6,1fr);gap:0;border:1px solid #b9c5d6;border-radius:4px;overflow:hidden;margin-bottom:10px}
 .rc-info div{padding:6px 9px;border-right:1px solid #d6dee9}.rc-info div:last-child{border-right:0}
 .rc-info .wide{grid-column:span 2}
@@ -24,13 +24,13 @@ const REPORT_CSS = `
 .rc-table td.c,.rc-table th.c{text-align:center}
 .rc-table .sub{font-weight:650}
 .rc-table .mk{font-weight:800;font-size:14px;color:#0f2747;text-align:center;width:70px}
-.rc-bar{height:6px;background:#e3e9f2;border-radius:3px;margin-top:4px;overflow:hidden}.rc-bar i{display:block;height:100%;background:#2f6fcb}
+.rc-bar{height:6px;background:#e3e9f2;border-radius:3px;margin-top:4px;overflow:hidden}.rc-bar i{display:block;height:100%;background:#e77722}
 .rc-table tfoot td{background:#f3f6fb;font-weight:700}
 .rc-sum{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px}
 .rc-sum div{border:1px solid #b9c5d6;border-radius:5px;padding:7px 10px;text-align:center}
 .rc-sum small{display:block;color:#6c7b90;font-size:8.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:700}
 .rc-sum b{font-size:19px;color:#0f2747}
-.rc-sum .pos b{color:#b3262e}
+.rc-sum .pos b{color:#c25a18}
 .rc-note{border:1px solid #f1d7a0;background:#fff8e8;color:#7a5a05;padding:5px 9px;border-radius:4px;font-size:10.5px;margin-bottom:8px}
 .rc-comments{display:grid;gap:8px;margin-bottom:8px}
 .rc-cbox{border:1px solid #b9c5d6;border-radius:5px;padding:7px 10px;min-height:56px}
@@ -52,7 +52,7 @@ const REPORT_CSS = `
 .cs-table td{padding:5px 6px;border:1px solid #cfd8e5;text-align:center}
 .cs-table tbody tr:nth-child(even) td{background:#f6f9fd}
 .cs-table td.tot{font-weight:800;color:#0f2747}
-.cs-table td.pos{font-weight:800;color:#b3262e}
+.cs-table td.pos{font-weight:800;color:#c25a18}
 .cs-table tfoot td{background:#e7eef8;font-weight:700;color:#0f2747}
 .cs-table .miss{color:#a0aab8}
 .cs-sign{display:flex;justify-content:space-between;margin-top:22px;font-size:11px;color:#44556b}.cs-sign span{border-top:1px solid #44556b;padding-top:3px;min-width:60mm;text-align:center}
