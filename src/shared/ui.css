@@ -121,3 +121,10 @@ label{font-size:.92rem;color:#40536a}
 .student-hit:hover{background:#fff0e1}
 
 .nav button{min-height:46px;gap:12px}.tab-icon{width:26px;height:26px;flex-basis:26px;filter:brightness(0) invert(1)}.brand .school-icon{filter:none;background:white;border-radius:7px;padding:2px}.top{min-height:62px}.nav button{font-size:15px}
+
+/* Navigation image clarity */
+.nav .tab-icon,.side .bottom .tab-icon{filter:none!important;opacity:1!important;background:#fff;border-radius:6px;padding:3px;object-fit:contain;box-sizing:border-box}
+.nav button.on .tab-icon{background:#fff}
+
+/* Form usability and responsive subject/recipient controls */
+.mc{position:relative;z-index:51;overscroll-behavior:contain}.mb input,.mb textarea,.mb select{pointer-events:auto;user-select:text;-webkit-user-select:text}form#af{display:block}form#af input{opacity:1;visibility:visible}.subject-row{display:flex;align-items:center;gap:12px;margin:9px 0;padding:9px 11px;background:#f7f9fc;border:1px solid #dfe6ef;border-radius:10px}.subject-row input{flex:1;width:100%;min-width:0}.subject-number{font-weight:800;color:#253d58;min-width:24px}.student-results{display:grid;gap:5px;max-height:220px;overflow:auto;margin:6px 0}.student-choice{display:block;width:100%;text-align:left;background:#f7f9fc;padding:10px;border:1px solid #dfe6ef;border-radius:8px}.student-choice:hover{background:#e9f2ff}

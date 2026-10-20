@@ -1,4 +1,4 @@
-const tabIcon = k => `<img class="tab-icon" src="${({"dashboard":"../assets/dashboard.png","applications":"../assets/applications.png","students":"../assets/students.png","classes":"../assets/classes.jpeg","discipline":"../assets/discipline.png","fees":"../assets/fees.png","staff":"../assets/staff.svg","receipts":"../assets/receipts.png","reports":"../assets/reports.png","settings":"../assets/settings.png","logout":"../assets/logout.png","login":"../assets/login.png","school":"../assets/bgs-icon.png"})[k] || "../assets/dashboard.png"}" alt="">`;
+const tabIcon = k => `<img class="tab-icon" src="${({"dashboard":"../assets/dashboard.png","applications":"../assets/applications.png","students":"../assets/students.png","classes":"../assets/classes.jpeg","discipline":"../assets/discipline.png","fees":"../assets/fees.png","staff":"../assets/staff.svg","receipts":"../assets/receipts.png","reports":"../assets/reports.png","settings":"../assets/settings.png","logout":"../assets/logout.png","login":"../assets/login.png","school":"../assets/bgs-icon.png","marks":"../assets/reports.png","promotions":"../assets/grading.png","conn":"../assets/settings.png"})[k] || "../assets/school.png"}" alt="">`;
 'use strict';
 const T = { page: 'marks', st: null, year: null, term: null, exam: 'BOT', cls: 'P1', subject: null };
 const root = $('#root'); let rv = null;
@@ -12,7 +12,7 @@ async function boot() {
   configureAcademics(T.st.academic?.subjects,T.st.academic?.grades);
   T.year = T.st.current.year; T.term = T.st.current.term;
   root.innerHTML = `<div class="app"><aside class="side"><div class="brand"><i><img class="school-icon" src="../assets/bgs-icon.png" alt=""></i><div>Bill Gates Junior<small>Nsangi · Teachers' PC</small></div></div><nav class="nav" id="nav"></nav>
-  <div class="bottom"><button id="teacherLock">Lock / log out</button><div id="who" style="color:#9db6d8;font-size:.8rem;padding:0 6px 8px"></div></div></aside><section class="main"><div class="top"><b style="color:var(--navy)" id="ttl"></b><span class="sp"></span><span id="conn"></span></div><div class="page" id="page"></div></section></div>`;
+  <div class="bottom"><button id="teacherLock">${tabIcon("logout")} Lock / log out</button><div id="who" style="color:#9db6d8;font-size:.8rem;padding:0 6px 8px"></div></div></aside><section class="main"><div class="top"><b style="color:var(--navy)" id="ttl"></b><span class="sp"></span><span id="conn"></span></div><div class="page" id="page"></div></section></div>`;
   $('#teacherLock').onclick=async()=>{await api('auth.logout');location.reload();};
   window.bgs.on(async () => { const was = T.st; T.st = await api('t.state'); configureAcademics(T.st.academic?.subjects,T.st.academic?.grades);paintConn(); if (T.page === 'students' || (T.page === 'reports' && rv)) { if (!$('#modal') && T.page === 'reports') rv.refresh(); else if (T.page === 'students') draw(); } });
   draw();
@@ -78,7 +78,7 @@ const PG = {
   },
   conn() {
     const c = T.st.cfg;
-    page(`<div class="card" style="max-width:640px"><h3>Connection to the Headteacher's PC</h3><p class="muted">Ask the Headteacher for the <b>address</b> and the <b>school key</b> shown in her Settings page. Both computers must be on the same WiFi / network.</p>
+    page(`<div class="card" style="max-width:640px"><h3>Connection to the Headteacher's PC</h3><p class="muted">Pair once using the address and school key. These details stay saved on this computer. Whenever the Ethernet cable is connected and the Headteacher server is running, synchronization reconnects automatically. You do not need a new key each day.</p>
     <div class="field"><label>Your name (shown on the marks you enter)</label><input id="tn" value="${esc(c.teacher)}" placeholder="e.g. Mr. Okello (Director of Studies)"></div>
     <div class="field"><label>Headteacher PC address</label><input id="ha" value="${esc(c.hm)}" placeholder="e.g. 192.168.1.10:4750"></div>
     <div class="field"><label>School key</label><input id="hk" value="${esc(c.key)}" placeholder="XXXX-XXXX" style="text-transform:uppercase;letter-spacing:.1em"></div>

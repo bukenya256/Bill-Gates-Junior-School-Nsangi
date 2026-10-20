@@ -114,7 +114,7 @@ class HM {
     const subject=String(f.subject||'').trim(), body=String(f.message||'').trim();
     if(!subject||subject.length>120||!body||body.length>1200) fail('Enter a subject and message (maximum 1,200 characters).');
     const id=require('crypto').randomUUID();
-    const rec={id,category:f.category,subject,message:body,recipients:f.recipients||'manual',at:nowISO(),status:'draft',sent:0};
+    const rec={id,category:f.category,subject,message:body,recipients:f.recipients||'manual',studentId:f.studentId||null,at:nowISO(),status:'draft',sent:0};
     this.d.notifications[id]=rec;this.touch('notifications',id);this.log('notification draft',subject);this.done();return rec;
   }
   /* ---------- admissions & students ---------- */
