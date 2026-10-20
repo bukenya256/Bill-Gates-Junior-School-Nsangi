@@ -1,16 +1,20 @@
-const tabIcon = k => `<img class="tab-icon" src="${({"dashboard":"../assets/dashboard.png","applications":"../assets/applications.png","students":"../assets/students.png","classes":"../assets/classes.jpeg","discipline":"../assets/discipline.png","fees":"../assets/fees.png","staff":"../assets/staff.svg","receipts":"../assets/receipts.png","reports":"../assets/reports.png","settings":"../assets/settings.png","logout":"../assets/logout.png","login":"../assets/login.png","school":"../assets/school.png"})[k] || "../assets/dashboard.png"}" alt="">`;
+const tabIcon = k => `<img class="tab-icon" src="${({"dashboard":"../assets/dashboard.png","applications":"../assets/applications.png","students":"../assets/students.png","classes":"../assets/classes.jpeg","discipline":"../assets/discipline.png","fees":"../assets/fees.png","staff":"../assets/staff.svg","receipts":"../assets/receipts.png","reports":"../assets/reports.png","settings":"../assets/settings.png","logout":"../assets/logout.png","login":"../assets/login.png","school":"../assets/bgs-icon.png"})[k] || "../assets/dashboard.png"}" alt="">`;
 'use strict';
 const T = { page: 'marks', st: null, year: null, term: null, exam: 'BOT', cls: 'P1', subject: null };
 const root = $('#root'); let rv = null;
 const NAV = [['marks', '✏️', 'Enter Marks'], ['reports', '📊', 'Report Cards & Class Results'], ['students', '🎓', 'Student List'], ['promotions', '🎓', 'Term 3 Promotions'], ['conn', '🔗', 'Connection']];
 
 async function boot() {
+  const a=await api('auth.status');
+  if(!a.authed){root.innerHTML=`<div class="center-body"><form class="login" id="teacherLogin"><div class="logo"><img class="login-icon" src="../assets/bgs-icon.png" alt=""></div><h2>Teachers' Portal</h2><p class="muted">${a.hasPassword?'Enter your password':'Create a password for this Teachers PC'}</p><input type="password" id="teacherPW" required placeholder="Password (minimum 8 characters)">${a.hasPassword?'':'<input type="password" id="teacherConfirm" placeholder="Confirm password" required>'}<button class="pri">${a.hasPassword?'Unlock Teachers Portal':'Create password'}</button><p class="err" id="teacherErr"></p></form></div>`;$('#teacherLogin').onsubmit=async e=>{e.preventDefault();try{const pw=$('#teacherPW').value;if(!a.hasPassword&&pw!==$('#teacherConfirm').value)throw new Error('Passwords do not match');await api(a.hasPassword?'auth.login':'auth.setup',{pw});boot();}catch(err){$('#teacherErr').textContent=err.message;}};return;}
   T.st = await api('t.state');
   if (!T.st.cfg.teacher || !T.st.cfg.hm || !T.st.cfg.key) { T.page = 'conn'; }
+  configureAcademics(T.st.academic?.subjects,T.st.academic?.grades);
   T.year = T.st.current.year; T.term = T.st.current.term;
-  root.innerHTML = `<div class="app"><aside class="side"><div class="brand"><i><img class="school-icon" src="../assets/school.png" alt=""></i><div>Bill Gates Junior<small>Nsangi · Teachers' PC</small></div></div><nav class="nav" id="nav"></nav>
-  <div class="bottom"><div id="who" style="color:#9db6d8;font-size:.8rem;padding:0 6px 8px"></div></div></aside><section class="main"><div class="top"><b style="color:var(--navy)" id="ttl"></b><span class="sp"></span><span id="conn"></span></div><div class="page" id="page"></div></section></div>`;
-  window.bgs.on(async () => { const was = T.st; T.st = await api('t.state'); paintConn(); if (T.page === 'students' || (T.page === 'reports' && rv)) { if (!$('#modal') && T.page === 'reports') rv.refresh(); else if (T.page === 'students') draw(); } });
+  root.innerHTML = `<div class="app"><aside class="side"><div class="brand"><i><img class="school-icon" src="../assets/bgs-icon.png" alt=""></i><div>Bill Gates Junior<small>Nsangi · Teachers' PC</small></div></div><nav class="nav" id="nav"></nav>
+  <div class="bottom"><button id="teacherLock">Lock / log out</button><div id="who" style="color:#9db6d8;font-size:.8rem;padding:0 6px 8px"></div></div></aside><section class="main"><div class="top"><b style="color:var(--navy)" id="ttl"></b><span class="sp"></span><span id="conn"></span></div><div class="page" id="page"></div></section></div>`;
+  $('#teacherLock').onclick=async()=>{await api('auth.logout');location.reload();};
+  window.bgs.on(async () => { const was = T.st; T.st = await api('t.state'); configureAcademics(T.st.academic?.subjects,T.st.academic?.grades);paintConn(); if (T.page === 'students' || (T.page === 'reports' && rv)) { if (!$('#modal') && T.page === 'reports') rv.refresh(); else if (T.page === 'students') draw(); } });
   draw();
 }
 function paintConn() {
@@ -55,7 +59,7 @@ const PG = {
   },
   async reports() {
     page('<div id="rv"></div>');
-    rv = ReportsView($('#rv'), { note: 'Print any learner\'s report card, or the whole class results sheet. Reports use the marks saved on this PC.', getData: async y => { const s = await api('t.state'); T.st = s; return { students: s.students, marks: s.marks.filter(m => m.year === y), comments: s.comments.filter(c => c.id.startsWith(y + '|')), promotions: s.promotions.filter(p => p.year === y), current: s.current }; }, saveRemark: (id, teacher, head) => api('t.setComment', { id, teacher, head }) });
+    rv = ReportsView($('#rv'), { note: 'Print any learner\'s report card, or the whole class results sheet. Reports use the marks saved on this PC.', getData: async y => { const s = await api('t.state'); T.st = s; return { students: s.students, marks: s.marks.filter(m => m.year === y), comments: s.comments.filter(c => c.id.startsWith(y + '|')), promotions: s.promotions.filter(p => p.year === y), academic: s.academic, current: s.current }; }, saveRemark: (id, teacher, head) => api('t.setComment', { id, teacher, head }) });
     await rv.start({ year: T.year, term: T.term });
   },
   students() {
@@ -82,7 +86,7 @@ const PG = {
     <p class="muted">This PC only receives the <b>student list (name, admission number, class)</b>. It never sees fees, payments, salaries or phone numbers.</p></div>`);
     const show = () => { const s = T.st.conn; $('#cs') && ($('#cs').innerHTML = s.state === 'online' ? '<span class="paid">✓ Connected</span>' : `<span class="owe">${esc(s.error || '')}</span>`); };
     show();
-    $('#sv').onclick = () => run(async () => { await api('t.setConfig', { teacher: $('#tn').value, hm: $('#ha').value, key: $('#hk').value }); $('#cs').textContent = 'Connecting…'; await new Promise(r => setTimeout(r, 1500)); await api('t.syncNow'); T.st = await api('t.state'); paintConn(); show(); });
+    $('#sv').onclick = () => run(async () => { await api('t.setConfig', { teacher: $('#tn').value, hm: $('#ha').value, key: $('#hk').value }); $('#cs').textContent = 'Connecting…'; await new Promise(r => setTimeout(r, 1500)); await api('t.syncNow'); T.st = await api('t.state'); configureAcademics(T.st.academic?.subjects,T.st.academic?.grades);paintConn(); show(); });
   },
 };
 const gradeChip = s => { const g = gradeOf(s); return g ? `<span class="chip g-${g.g}">${g.g}</span>` : ''; };

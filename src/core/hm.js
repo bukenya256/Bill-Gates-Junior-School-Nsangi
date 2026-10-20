@@ -4,7 +4,7 @@ const R = require('../shared/rules');
 
 const DEFAULTS = {
   meta: { createdAt: null, pw: null, lanKey: null, counters: {}, current: null, seq: 0, admSeq: {} },
-  students: {}, staff: {}, payments: {}, bills: {}, salaryBills: {}, marks: {}, comments: {}, discipline: {}, promotions: {}, audit: [], dirty: {},
+  students: {}, staff: {}, payments: {}, bills: {}, salaryBills: {}, marks: {}, comments: {}, discipline: {}, promotions: {}, notifications: {}, academic: {subjects: null, grades: null}, audit: [], dirty: {},
 };
 const nowISO = () => new Date().toISOString();
 class Fail extends Error {}
@@ -13,6 +13,7 @@ const fail = m => { throw new Fail(m); };
 class HM {
   constructor(store, hooks = {}) {
     this.s = store; this.d = store.data; this.hooks = hooks;
+    this.d.academic ||= {subjects:null,grades:null}; this.d.notifications ||= {}; R.configureAcademics(this.d.academic.subjects,this.d.academic.grades);
     const m = this.d.meta;
     if (!m.createdAt) m.createdAt = nowISO();
     if (!m.lanKey) m.lanKey = crypto.randomBytes(4).toString('hex').toUpperCase().replace(/(.{4})/, '$1-');
@@ -87,9 +88,35 @@ class HM {
       return { ...w, period: { key: period, demand, paid, balance: Math.max(0, demand - paid) } };
     }).sort((a, b) => (a.last + a.first).localeCompare(b.last + b.first));
     const payments = Object.values(this.d.payments).sort((a, b) => b.ts.localeCompare(a.ts));
-    return { school: R.SCHOOL, current: c, view: { year, term, period }, students, staff, payments, discipline: Object.values(this.d.discipline).sort((a,b)=>b.at.localeCompare(a.at)), promotions: Object.values(this.d.promotions), lanKey: this.d.meta.lanKey, seq: this.d.meta.seq };
+    return { school: R.SCHOOL, current: c, view: { year, term, period }, students, staff, payments, discipline: Object.values(this.d.discipline).sort((a,b)=>b.at.localeCompare(a.at)), promotions: Object.values(this.d.promotions), lanKey: this.d.meta.lanKey, academic: this.d.academic, notifications: Object.values(this.d.notifications).sort((a,b)=>b.at.localeCompare(a.at)), seq: this.d.meta.seq };
   }
 
+  setSubjects(cls, subjects) {
+    if (!R.CLASSES.includes(cls)) fail('Invalid class.');
+    if (!Array.isArray(subjects) || !subjects.length || subjects.length > 20) fail('Add 1 to 20 subjects.');
+    const names=subjects.map(x=>String(x).trim());
+    if(names.some(x=>!x || x.length>65) || new Set(names.map(x=>x.toLowerCase())).size!==names.length) fail('Subjects must be unique and non-empty.');
+    this.d.academic.subjects ||= structuredClone(R.DEFAULT_SUBJECTS);
+    this.d.academic.subjects[cls]=names;
+    R.configureAcademics(this.d.academic.subjects,this.d.academic.grades);
+    this.touch('academic','current');this.log('subjects',cls);this.done(); return this.d.academic;
+  }
+  setGrades(grades) {
+    if(!Array.isArray(grades)||grades.length<2||grades.length>15) fail('Define 2 to 15 grades.');
+    const a=grades.map(x=>({min:Number(x.min),g:String(x.g||'').trim(),label:String(x.label||'').trim()}));
+    if(a.some((x,i)=>!Number.isInteger(x.min)||x.min<0||x.min>100||!x.g||x.g.length>8||!x.label||x.label.length>60||(i && a[i-1].min<=x.min))||a.at(-1).min!==0) fail('Grades must descend from at most 100 to 0 with unique boundaries.');
+    this.d.academic.grades=a;R.configureAcademics(this.d.academic.subjects,a);
+    this.touch('academic','current');this.log('grades','Grading scale updated');this.done();return a;
+  }
+  saveNotification(f) {
+    const allowed=['School fees reminder','School fees warning','Send child home for school fees','Suspension','Expulsion','Custom'];
+    if(!allowed.includes(f.category)) fail('Choose notification category.');
+    const subject=String(f.subject||'').trim(), body=String(f.message||'').trim();
+    if(!subject||subject.length>120||!body||body.length>1200) fail('Enter a subject and message (maximum 1,200 characters).');
+    const id=require('crypto').randomUUID();
+    const rec={id,category:f.category,subject,message:body,recipients:f.recipients||'manual',at:nowISO(),status:'draft',sent:0};
+    this.d.notifications[id]=rec;this.touch('notifications',id);this.log('notification draft',subject);this.done();return rec;
+  }
   /* ---------- admissions & students ---------- */
   _need(v, label) { if (!String(v || '').trim()) fail(`${label} is required.`); return String(v).trim(); }
   addApplication(f) {
@@ -287,10 +314,10 @@ class HM {
   }
   saveHeadRemark(id, teacher, head) { this.acceptMarks([], [{ id, teacher, head, at: nowISO() }]); this.s.save(true); }
   marksFor(year) { return Object.values(this.d.marks).filter(m => m.year === Number(year)); }
-  getMarks(year) { return { marks: this.marksFor(year), comments: Object.values(this.d.comments).filter(c => c.id.startsWith(year + '|')), promotions: Object.values(this.d.promotions).filter(p => p.year === Number(year)), students: Object.values(this.d.students).map(s => ({ id: s.id, first: s.first, last: s.last, className: s.className, classHistory: s.classHistory || {}, status: s.status })) }; }
+  getMarks(year) { return { marks: this.marksFor(year), comments: Object.values(this.d.comments).filter(c => c.id.startsWith(year + '|')), promotions: Object.values(this.d.promotions).filter(p => p.year === Number(year)), academic: this.d.academic, students: Object.values(this.d.students).map(s => ({ id: s.id, first: s.first, last: s.last, className: s.className, classHistory: s.classHistory || {}, status: s.status })) }; }
   teacherSnapshot(since) {
     since = Number(since) || 0;
-    return { current: this.cur(), students: Object.values(this.d.students).filter(s => s.status !== 'pending').map(s => ({ id: s.id, first: s.first, last: s.last, className: s.className, classHistory: s.classHistory || {}, status: s.status, year: this.cur().year })),
+    return { current: this.cur(), academic: this.d.academic, students: Object.values(this.d.students).filter(s => s.status !== 'pending').map(s => ({ id: s.id, first: s.first, last: s.last, className: s.className, classHistory: s.classHistory || {}, status: s.status, year: this.cur().year })),
       promotions: Object.values(this.d.promotions), marks: Object.values(this.d.marks).filter(m => m.seq > since), comments: Object.values(this.d.comments).filter(c => c.seq > since), maxSeq: this.d.meta.seq };
   }
 }

@@ -8,6 +8,7 @@ class Cloud {
   _rec(col, id) {
     const d = this.hm.d;
     if (col === 'audit') return { key: 'audit:all', collection: 'audit', data: d.audit.slice(-500) };
+    if (col === 'academic') return { key:'academic:current',collection:'academic',data:d.academic };
     if (col === 'meta') return { key: 'meta:current', collection: 'meta', data: { current: d.meta.current, counters: d.meta.counters, admSeq: d.meta.admSeq } };
     const v = d[col] && d[col][id]; return v ? { key: `${col}:${id}`, collection: col, data: v } : null;
   }
@@ -25,8 +26,8 @@ class Cloud {
     if (this.busy) return; this.busy = true;
     try {
       const d = this.hm.d;
-      if (all) for (const col of ['students', 'staff', 'payments', 'bills', 'salaryBills', 'marks', 'comments', 'discipline', 'promotions']) for (const id of Object.keys(d[col])) d.dirty[col + ':' + id] = 1;
-      if (all) { d.dirty['meta:current'] = 1; d.dirty['audit:all'] = 1; }
+      if (all) for (const col of ['students', 'staff', 'payments', 'bills', 'salaryBills', 'marks', 'comments', 'discipline', 'promotions','notifications']) for (const id of Object.keys(d[col])) d.dirty[col + ':' + id] = 1;
+      if (all) { d.dirty['meta:current'] = 1; d.dirty['academic:current']=1; d.dirty['audit:all'] = 1; }
       for (;;) {
         const keys = Object.keys(d.dirty).slice(0, 200); if (!keys.length) break;
         const versions = new Map(keys.map(k => [k, d.dirty[k]]));
@@ -56,7 +57,7 @@ class Cloud {
   buildRecovery(rows) {
     const {DEFAULTS} = require('./hm');
     const d = structuredClone(DEFAULTS), counts = {};
-    const allowed = ['students','staff','payments','bills','salaryBills','marks','comments','discipline','promotions'];
+    const allowed = ['notifications','students','staff','payments','bills','salaryBills','marks','comments','discipline','promotions'];
     let valid = 0;
     for (const row of rows) {
       if (!row || typeof row.key !== 'string' || !row.data || typeof row.data !== 'object') continue;
@@ -64,6 +65,7 @@ class Cloud {
         if (!row.data.current || !Number.isInteger(+row.data.current.year) || ![1,2,3].includes(+row.data.current.term)) throw new Error('Cloud academic-year record is invalid.');
         Object.assign(d.meta, { current: row.data.current, counters: row.data.counters || {}, admSeq: row.data.admSeq || {} }); valid++; continue;
       }
+      if (row.key === 'academic:current' && row.collection==='academic') { d.academic=row.data; valid++; continue; }
       if (row.key === 'audit:all' && row.collection === 'audit') { if(Array.isArray(row.data)) d.audit=row.data; valid++; continue; }
       if (!allowed.includes(row.collection) || !row.key.startsWith(row.collection+':')) continue;
       const id=row.key.slice(row.collection.length+1); if (!id || Object.hasOwn(d[row.collection],id)) throw new Error('Duplicate or invalid cloud record: '+row.key);

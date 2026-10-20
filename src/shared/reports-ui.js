@@ -1,6 +1,5 @@
 'use strict';
-/* ===== Academic reports screen, identical on both PCs =====
-   P.getData(year) -> {students, marks, comments, current}   P.saveRemark(id, teacher, head)   P.note (banner text) */
+
 function ReportsView(root, P) {
   const S = { year: null, term: null, exam: 'EOT', cls: 'P1', data: null, results: [] };
   const years = () => { const cur = (S.data && S.data.current.year) || new Date().getFullYear(); const a = []; for (let y = cur + 1; y >= 2026; y--) a.push(y); return a; };
@@ -11,7 +10,7 @@ function ReportsView(root, P) {
     const roster = rosterFor(d.students, d.marks, S.year, S.cls, d.current.year);
     S.results = classResults(roster, S.year, S.term, S.exam, map);
   }
-  async function load() { S.data = await P.getData(S.year); draw(); }
+  async function load() { S.data = await P.getData(S.year); configureAcademics(S.data.academic?.subjects,S.data.academic?.grades); draw(); }
   function draw() {
     compute(); const rs = S.results, subs = subjectsFor(S.cls);
     const entered = rs.reduce((a, r) => a + r.entered, 0), total = rs.reduce((a, r) => a + r.of, 0);

@@ -1,12 +1,12 @@
 'use strict';
 const R = require('../shared/rules');
 const nowISO = () => new Date().toISOString();
-const DEFAULTS = { cfg: { hm: '', key: '', teacher: '' }, students: [], current: null, marks: {}, comments: {}, promotions: {}, unsynced: { marks: {}, comments: {}, promotions: {} }, lastSeq: 0 };
+const DEFAULTS = { cfg: { hm: '', key: '', teacher: '' }, students: [], current: null, marks: {}, comments: {}, promotions: {}, unsynced: { marks: {}, comments: {}, promotions: {} }, lastSeq: 0, academic: {subjects:null,grades:null} };
 /** The Teachers' PC: own local copy of marks (saved immediately), auto-forwarded to the Headteacher PC. */
 class Teacher {
-  constructor(store, onChange) { this.s = store; this.d = store.data; this.d.promotions ||= {}; this.d.unsynced.promotions ||= {}; this.onChange = onChange || (() => { }); this.conn = { state: 'offline', error: '', last: null }; this.busy = false; this.loop = setInterval(() => this.sync(), 8000); setTimeout(() => this.sync(), 500); }
+  constructor(store, onChange) { this.s = store; this.d = store.data; this.d.academic ||= {subjects:null,grades:null}; R.configureAcademics(this.d.academic.subjects,this.d.academic.grades); this.d.promotions ||= {}; this.d.unsynced.promotions ||= {}; this.onChange = onChange || (() => { }); this.conn = { state: 'offline', error: '', last: null }; this.busy = false; this.loop = setInterval(() => this.sync(), 8000); setTimeout(() => this.sync(), 500); }
   pending() { return Object.keys(this.d.unsynced.marks).length + Object.keys(this.d.unsynced.comments).length + Object.keys(this.d.unsynced.promotions).length; }
-  state() { return { cfg: { ...this.d.cfg }, students: this.d.students, current: this.d.current || R.detectTerm(R.localISO()), marks: Object.values(this.d.marks), comments: Object.values(this.d.comments), promotions: Object.values(this.d.promotions), conn: { ...this.conn, pending: this.pending() } }; }
+  state() { return { cfg: { ...this.d.cfg }, students: this.d.students, academic:this.d.academic, current: this.d.current || R.detectTerm(R.localISO()), marks: Object.values(this.d.marks), comments: Object.values(this.d.comments), promotions: Object.values(this.d.promotions), conn: { ...this.conn, pending: this.pending() } }; }
   setConfig(c) { Object.assign(this.d.cfg, { hm: String(c.hm || '').trim(), key: String(c.key || '').trim().toUpperCase(), teacher: String(c.teacher || '').trim() }); this.s.save(true); this.sync(); this.onChange(); }
   _base() { let h = this.d.cfg.hm.replace(/^https?:\/\//, '').replace(/\/+$/, ''); if (!h) return ''; if (!/:\d+$/.test(h)) h += ':4750'; return 'http://' + h; }
   setMark(m) {
@@ -41,7 +41,7 @@ class Teacher {
         for (const k of mk) if (u.marks[k] && this.d.marks[k]?.at === saved.get('m:'+k)) delete u.marks[k]; for (const k of ck) if(this.d.comments[k]?.at === saved.get('c:'+k)) delete u.comments[k]; for (const k of pk) if(this.d.promotions[k]?.at === saved.get('p:'+k)) delete u.promotions[k];
       }
       const snap = await this._f('/api/teacher/sync?since=' + this.d.lastSeq);
-      this.d.students = snap.students; this.d.current = snap.current; for(const r of (snap.promotions || [])) if (!u.promotions[r.key]) this.d.promotions[r.key] = r;
+      this.d.students = snap.students; this.d.current = snap.current; this.d.academic=snap.academic||this.d.academic; R.configureAcademics(this.d.academic.subjects,this.d.academic.grades); for(const r of (snap.promotions || [])) if (!u.promotions[r.key]) this.d.promotions[r.key] = r;
       for (const m of snap.marks) { const o = this.d.marks[m.id]; if (!o || o.at <= m.at) { if (!u.marks[m.id]) this.d.marks[m.id] = m; } }
       for (const c of snap.comments) { const o = this.d.comments[c.id]; if (!o || o.at <= c.at) { if (!u.comments[c.id]) this.d.comments[c.id] = c; } }
       this.d.lastSeq = snap.maxSeq; this.conn = { state: 'online', error: '', last: nowISO() }; this.s.save();

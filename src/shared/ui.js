@@ -1,5 +1,5 @@
 'use strict';
-/* ===== small helpers shared by both PCs ===== */
+
 const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const api = (a, args) => window.bgs.call(a, args);
 function toast(t, bad) { let el = $('#toast'); if (!el) { el = document.createElement('div'); el.id = 'toast'; document.body.appendChild(el); } el.textContent = t; el.className = 'show' + (bad ? ' bad' : ''); clearTimeout(toast._t); toast._t = setTimeout(() => el.className = '', bad ? 5000 : 3200); }
@@ -22,7 +22,7 @@ document.addEventListener('input', e => {
   const v = el.value.replace(/[^\d]/g, ''); el.value = v ? num(v) : '';
 });
 
-/* number → words, for the receipt ("Two hundred thousand shillings only") */
+
 function words(n) {
   const a = ['', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen'], b = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety'];
   const h = x => { let s = ''; if (x >= 100) { s += a[Math.floor(x / 100)] + ' hundred'; x %= 100; if (x) s += ' and '; } if (x >= 20) { s += b[Math.floor(x / 10)] + (x % 10 ? '-' + a[x % 10] : ''); } else if (x) s += a[x]; return s; };
@@ -30,7 +30,7 @@ function words(n) {
   const s = parts.join(', '); return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-/* ===== printable receipt ===== */
+
 const RECEIPT_CSS = `*{box-sizing:border-box}body{margin:0;font:12px/1.43 "Segoe UI",Arial,sans-serif;color:#14202f}
 .rcpt{width:105mm;margin:0 auto 8mm;border:1.4px solid #12304e;border-top:4px solid #e77722;border-radius:7px;padding:5mm 6mm;position:relative;page-break-inside:avoid}
 .rh{display:flex;align-items:center;gap:12px;border-bottom:3px solid #e77722;padding-bottom:8px}.rh .cr{width:32px;height:32px;border-radius:12px;background:#e77722;color:#fff;display:grid;place-items:center;font-size:18px;-webkit-print-color-adjust:exact;print-color-adjust:exact}

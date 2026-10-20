@@ -1,20 +1,22 @@
 {
   "appId": "ug.billgates.school",
   "productName": "BGS School System",
-  "directories": {"output": "dist-mojave"},
-  "asar": true,
+  "directories": {
+    "output": "dist-mojave"
+  },
   "files": [
     "src/**/*",
-    "package.json",
-    "!dist/**",
-    "!dist-mojave/**"
+    "package.json"
   ],
   "mac": {
-    "target": ["dmg"],
-    "minimumSystemVersion": "10.14.0",
+    "target": [
+      "dmg"
+    ],
+    "icon": "src/assets/bgs-icon.icns",
     "category": "public.app-category.education",
-    "identity": null,
-    "artifactName": "BGS-School-System-Mojave-${version}-${arch}.${ext}"
+    "identity": null
   },
-  "dmg": {"title": "BGS School System ${version}"}
+  "dmg": {
+    "artifactName": "BGS-School-System-Mojave-${version}-${arch}.dmg"
+  }
 }

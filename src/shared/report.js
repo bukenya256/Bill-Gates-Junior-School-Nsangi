@@ -1,5 +1,5 @@
 'use strict';
-/* ============ Printable reports: individual report card + class sheet ============ */
+
 const REPORT_CSS = `
 *{box-sizing:border-box}
 .rc-page,.cs-page,.rc-page *,.cs-page *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
@@ -41,7 +41,7 @@ const REPORT_CSS = `
 .rc-decision{border:1px solid #aab8c8;border-radius:5px;margin:8px 0 6px;padding:7px 10px;display:flex;align-items:center;justify-content:space-between;gap:10px;break-inside:avoid;page-break-inside:avoid}.rc-decision strong{font-size:10px;color:#0f2747;letter-spacing:.03em}.rc-decision-options{display:flex;gap:22px;align-items:center}.rc-decision-choice{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600}.rc-decision-box{width:13px;height:13px;border:1.5px solid #14202f;display:inline-block;background:#fff;flex:0 0 13px}.rc-key{margin-top:auto;border-top:1px solid #cfd8e5;padding-top:6px;font-size:9.5px;color:#44556b;display:flex;flex-wrap:wrap;gap:4px 12px}
 .rc-key b{color:#0f2747}
 .rc-foot{margin-top:5px;text-align:center;color:#8a96a8;font-size:9px}
-/* class sheet */
+
 .cs-page{padding:0 0 4mm;page-break-after:always;break-after:page}
 .cs-head{margin-bottom:6px}.cs-head .rc-school{text-align:left}
 .cs-meta{display:flex;gap:18px;margin:6px 0 8px;font-size:11.5px;color:#44556b;flex-wrap:wrap}.cs-meta b{color:#0f2747}
@@ -82,7 +82,7 @@ function schoolHead(cls) {
   return `<div class="${cls}"><div class="rc-crest">${CREST_SVG}</div><div class="rc-school"><h1>${esc(SCHOOL.name.toUpperCase())}</h1><p>Excellence in Learning</p></div></div>`;
 }
 
-/** One student's report card (one A4 page). res = result row from the app; ctx = {term, year, exam, classSize} */
+
 function reportCardHTML(res, ctx, comments) {
   const st = res.st, g = gradeOf(res.avg), cm = comments || defaultRemarks(res.avg);
   const rows = res.rows.map(r => {
@@ -110,7 +110,7 @@ function reportCardHTML(res, ctx, comments) {
   </section>`;
 }
 
-/** Whole-class results sheet (landscape). results = classResults() output */
+
 function classSheetHTML(results, ctx) {
   const subs = ctx.subjects, n = results.length;
   const col = s => results.map(r => r.rows.find(x => x.subject === s).score).filter(v => v != null);

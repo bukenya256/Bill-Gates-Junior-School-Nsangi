@@ -1,5 +1,5 @@
 'use strict';
-const fs = require('fs'), path = require('path'), os = require('os');
+const fs = require('fs'), path = require('path'), os = require('os'), crypto = require('crypto');
 const { Store } = require('./store'), { HM, DEFAULTS, Fail } = require('./hm'), { startServer } = require('./server'), { Cloud } = require('./cloud'), { Teacher, DEFAULTS: TDEF } = require('./teacher');
 
 /** Everything the screens can ask for. Used by Electron (main.js) and by the browser test harness (dev-server.js). */
@@ -35,16 +35,16 @@ function createApp({ dataDir, backupDir, notify = () => { }, enc = { enc: s => s
   init();
   const lanIps = () => Object.values(os.networkInterfaces()).flat().filter(i => i && i.family === 'IPv4' && !i.internal).map(i => i.address);
   const needHM = () => { if (!A.hm) throw new Fail('Not the Headteacher PC.'); if (!A.authed) throw new Fail('Please log in first.'); return A.hm; };
-  const needT = () => { if (!A.teacher) throw new Fail('Not the Teachers PC.'); return A.teacher; };
+  const needT = () => { if (!A.authed) throw new Fail('Please log in first.'); if (!A.teacher) throw new Fail('Not the Teachers PC.'); return A.teacher; };
 
   const H = {
     'mode.get': () => ({ mode: A.mode }),
     'mode.set': m => { if (A.mode && A.mode !== m) throw new Fail('This computer is already set up. Use Settings → Reset to change it.'); if (!['hm', 'teacher'].includes(m)) throw new Fail('Bad mode'); A.mode = cfg.mode = m; saveCfg(); init(); return { mode: m }; },
-    'auth.status': () => ({ hasPassword: A.hm ? A.hm.hasPassword() : true, authed: A.authed }),
-    'auth.setup': ({ pw }) => { if (!A.hm) throw new Fail('Not the Headteacher PC.'); if (A.hm.hasPassword()) throw new Fail('Password already set.'); A.hm.setPassword(pw); A.authed = true; return true; },
-    'auth.login': ({ pw }) => { if (!A.hm) throw new Fail('Not the Headteacher PC.'); if (!A.hm.checkPassword(pw)) throw new Fail('Wrong password.'); A.authed = true; return true; },
+    'auth.status': () => ({ hasPassword: A.hm ? A.hm.hasPassword() : !!cfg.teacherPassword, authed: A.authed }),
+    'auth.setup': ({ pw }) => { if (!A.hm && A.teacher) { if(cfg.teacherPassword) throw new Fail('Password already set.'); if(String(pw||'').length<8) throw new Fail('Use at least 8 characters.'); const salt=crypto.randomBytes(16).toString('hex');cfg.teacherPassword={salt,hash:crypto.scryptSync(pw,salt,32).toString('hex')};saveCfg();A.authed=true;return true; } if (!A.hm) throw new Fail('Not the Headteacher PC.'); if (A.hm.hasPassword()) throw new Fail('Password already set.'); A.hm.setPassword(pw); A.authed = true; return true; },
+    'auth.login': ({ pw }) => { if (!A.hm && A.teacher) { const p=cfg.teacherPassword;if(!p)throw new Fail('Set a password first.');const a=crypto.scryptSync(String(pw||''),p.salt,32),b=Buffer.from(p.hash,'hex');if(a.length!==b.length||!crypto.timingSafeEqual(a,b))throw new Fail('Wrong password.');A.authed=true;return true; } if (!A.hm) throw new Fail('Not the Headteacher PC.'); if (!A.hm.checkPassword(pw)) throw new Fail('Wrong password.'); A.authed = true; return true; },
     'auth.logout': () => { A.authed = false; return true; },
-    'auth.change': ({ old, pw }) => { needHM().setPassword(pw, old); return true; },
+    'auth.change': ({ old, pw }) => { if(A.teacher) {needT(); const p=cfg.teacherPassword;if(!p||!crypto.timingSafeEqual(crypto.scryptSync(String(old||''),p.salt,32),Buffer.from(p.hash,'hex')))throw new Fail('Old password is wrong.');if(String(pw||'').length<8)throw new Fail('Use at least 8 characters.'); const salt=crypto.randomBytes(16).toString('hex');cfg.teacherPassword={salt,hash:crypto.scryptSync(pw,salt,32).toString('hex')};saveCfg();return true;} needHM().setPassword(pw, old); return true; },
     'settings.get': () => { const hm = needHM(); return { lan: { ips: lanIps(), port, key: hm.d.meta.lanKey, error: A.server && A.server.lastError }, cloud: { url: cfg.cloud ? cfg.cloud.url : '', hasKey: !!(cfg.cloud && cfg.cloud.key), status: A.cloud.status() }, backupDir, dataDir }; },
     'settings.cloud': ({ url, key }) => { needHM(); cfg.cloud = { url: String(url || '').trim(), key: key ? enc.enc(String(key).trim()) : (cfg.cloud ? cfg.cloud.key : '') }; if (!cfg.cloud.url) cfg.cloud = null; saveCfg(); A.cloud.st.error = ''; A.cloud.kick(); return true; },
     'cloud.test': async () => { needHM(); await A.cloud.test(); return true; },
@@ -76,6 +76,9 @@ function createApp({ dataDir, backupDir, notify = () => { }, enc = { enc: s => s
     // headteacher data
     'hm.state': a => needHM().getState(a),
     'hm.marks': ({ year }) => needHM().getMarks(year),
+    'hm.setSubjects': a => needHM().setSubjects(a.cls,a.subjects),
+    'hm.setGrades': a => needHM().setGrades(a.grades),
+    'hm.saveNotification': a => needHM().saveNotification(a),
     'hm.addApplication': f => needHM().addApplication(f),
     'hm.payAdmission': a => needHM().payAdmission(a.id, a.amount, a.method, a.note),
     'hm.updateStudent': a => needHM().updateStudent(a.id, a.f),

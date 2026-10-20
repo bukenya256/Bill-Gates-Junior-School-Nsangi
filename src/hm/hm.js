@@ -1,17 +1,17 @@
-const tabIcon = k => `<img class="tab-icon" src="${({"dashboard":"../assets/dashboard.png","applications":"../assets/applications.png","students":"../assets/students.png","classes":"../assets/classes.jpeg","discipline":"../assets/discipline.png","fees":"../assets/fees.png","staff":"../assets/staff.svg","receipts":"../assets/receipts.png","reports":"../assets/reports.png","settings":"../assets/settings.png","logout":"../assets/logout.png","login":"../assets/login.png","school":"../assets/school.png"})[k] || "../assets/dashboard.png"}" alt="">`;
+const tabIcon = k => `<img class="tab-icon" src="${({"dashboard":"../assets/dashboard.png","applications":"../assets/applications.png","students":"../assets/students.png","classes":"../assets/classes.jpeg","discipline":"../assets/discipline.png","fees":"../assets/fees.png","staff":"../assets/staff.svg","receipts":"../assets/receipts.png","reports":"../assets/reports.png","settings":"../assets/settings.png","logout":"../assets/logout.png","login":"../assets/login.png","school":"../assets/bgs-icon.png"})[k] || "../assets/dashboard.png"}" alt="">`;
 'use strict';
 const S = { page: 'dashboard', year: null, term: null, period: null, d: null, sync: null, f: { q: '', cls: '', st: 'active', ty: '', fee: '', rcpt: 'all', adm: 'pending', from: '', to: '' } };
-const NAV = [['dashboard', '🏠', 'Dashboard'], ['g1', 'School'], ['applications', '📝', 'Applications'], ['students', '🎓', 'Students'], ['classes', '🏫', 'Classes'], ['discipline', '⚖️', 'Discipline'], ['fees', '💰', 'School Fees'], ['staff', '👩‍🏫', 'Staff & Salaries'], ['receipts', '🧾', 'Receipts'], ['g2', 'Academics'], ['reports', '📊', 'Academic Reports'], ['g3', 'System'], ['settings', '⚙️', 'Settings & Backup']];
+const NAV = [['dashboard', '🏠', 'Dashboard'], ['g1', 'School'], ['applications', '📝', 'Applications'], ['students', '🎓', 'Students'], ['classes', '🏫', 'Classes'], ['discipline', '⚖️', 'Discipline'], ['fees', '💰', 'School Fees'], ['staff', '👩‍🏫', 'Staff & Salaries'], ['receipts', '🧾', 'Receipts'], ['g2', 'Academics'], ['reports', '📊', 'Academic Reports'], ['subjects', '📚', 'Subjects'], ['grading', '🎓', 'Grading Scale'], ['g3', 'System'], ['notifications', '✉️', 'Notifications'], ['settings', '⚙️', 'Settings & Backup']];
 let reportsView = null;
 const root = $('#root');
 const termTxt = (y, t) => `Term ${t} ${y}`;
 const readOnlyViewNote = () => (S.d && (S.year !== S.d.current.year || S.term !== S.d.current.term)) ? `<div class="banner">You are viewing <b>${termTxt(S.year, S.term)}</b> – not the current term (${termTxt(S.d.current.year, S.d.current.term)}). Payments recorded here are saved against ${termTxt(S.year, S.term)}.</div>` : '';
 
-/* ---------- start-up: setup password / login ---------- */
+
 async function boot() {
   const a = await api('auth.status');
   if (a.authed) return enter();
-  root.innerHTML = `<div class="center-body"><form class="login" id="lf"><div class="logo"><img src="../assets/school.png" alt="" class="login-icon"></div><h2>Bill Gates Junior School</h2><p class="muted">${a.hasPassword ? 'Headteacher login' : 'First time: create the Headteacher password'}</p>
+  root.innerHTML = `<div class="center-body"><form class="login" id="lf"><div class="logo"><img src="../assets/bgs-icon.png" alt="" class="login-icon"></div><h2>Bill Gates Junior School</h2><p class="muted">${a.hasPassword ? 'Headteacher login' : 'First time: create the Headteacher password'}</p>
   <input type="password" id="pw" placeholder="${a.hasPassword ? 'Password' : 'Choose a password (min 4 characters)'}" autofocus>${a.hasPassword ? '' : '<input type="password" id="pw2" placeholder="Repeat password">'}
   <button class="pri" type="submit">${a.hasPassword ? 'Log in' : 'Create password & start'}</button><p class="err" id="le"></p></form></div>`;
   $('#lf').onsubmit = async e => {
@@ -22,7 +22,7 @@ async function boot() {
 }
 async function enter() {
   const st = await api('hm.state'); S.year = st.current.year; S.term = st.current.term; S.period = `${st.current.year}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
-  root.innerHTML = `<div class="app"><aside class="side"><div class="brand"><i><img class="school-icon" src="../assets/school.png" alt=""></i><div>Bill Gates Junior<small>Nsangi · Headteacher</small></div></div><nav class="nav" id="nav"></nav>
+  root.innerHTML = `<div class="app"><aside class="side"><div class="brand"><i><img class="school-icon" src="../assets/bgs-icon.png" alt=""></i><div>Bill Gates Junior<small>Nsangi · Headteacher</small></div></div><nav class="nav" id="nav"></nav>
     <div class="bottom"><button id="lock">${tabIcon("logout")} Lock / log out</button></div></aside>
     <section class="main"><div class="top"><b style="color:var(--navy)">Academic year</b><select id="selY"></select><select id="selT"></select><span id="curtag"></span><span class="sp"></span><span id="syncchip"></span></div><div class="page" id="page"></div></section></div>`;
   $('#lock').onclick = async () => { await api('auth.logout'); location.reload(); };
@@ -61,7 +61,7 @@ const clsOpts = sel => `<option value="">All classes</option>` + CLASSES.map(c =
 const methodSel = () => `<div class="field"><label>Payment method</label><select id="fm"><option>Cash</option><option>Mobile Money</option><option>Bank</option></select></div>`;
 
 const PAGES = {
-  /* ================= Dashboard ================= */
+  
   dashboard() {
     const d = S.d, act = d.students.filter(s => s.status === 'active'), withBill = d.students.filter(s => s.fee.has);
     const due = withBill.reduce((a, s) => a + s.fee.due, 0), paid = withBill.reduce((a, s) => a + s.fee.paid, 0);
@@ -75,7 +75,7 @@ const PAGES = {
     <div class="card"><h3 style="margin-bottom:10px">Latest receipts</h3>${recent.length ? `<table class="t"><tbody>${recent.map(p => `<tr><td class="nowrap">${fmtDT(p.ts)}</td><td>${esc(p.receiptNo)}</td><td>${esc(p.studentName || p.staffName)}</td><td>${kindChip(p.kind)}</td><td class="n"><b>${money(p.amount)}</b></td></tr>`).join('')}</tbody></table>` : '<div class="empty">No payments recorded yet.</div>'}</div>`);
   },
 
-  /* ================= Applications ================= */
+  
   applications() {
     const draw = () => {
       const all = S.d.students.filter(s => (S.f.adm === 'pending' ? s.status === 'pending' : s.admission.paid > 0 && s.status !== 'pending') && hit(s, S.f.q));
@@ -91,7 +91,7 @@ const PAGES = {
     bindSearch('q', 'q', draw); $('#newapp').onclick = newApplication; draw();
   },
 
-  /* ================= Students ================= */
+  
   students() {
     const draw = () => {
       const f = S.f, list = S.d.students.filter(s => hit(s, f.q) && (!f.cls || s.className === f.cls) && (!f.ty || s.type === f.ty) && (f.st === 'all' || s.status === f.st));
@@ -135,7 +135,7 @@ const PAGES = {
       $('#disciplineForm').onsubmit=e=>{e.preventDefault();run(async()=>{const f=Object.fromEntries(new FormData(e.target));if(!f.studentId)throw new Error('Search and select a student first.');if(f.action==='expulsion'&&!confirm('Expel this student and mark them inactive?'))return;await api('hm.addDiscipline',f);closeModal();toast('Disciplinary case saved');refresh();});};
     };
   },
-  /* ================= School fees ================= */
+  
   fees() {
     const draw = () => {
       const f = S.f, list = S.d.students.filter(s => s.fee.has && hit(s, f.q) && (!f.cls || s.className === f.cls) && (!f.fee || s.fee.status === f.fee));
@@ -152,7 +152,7 @@ const PAGES = {
     bindSearch('q', 'q', draw); $('#fc').onchange = e => { f.cls = e.target.value; draw(); }; $('#ff').onchange = e => { f.fee = e.target.value; draw(); }; draw();
   },
 
-  /* ================= Staff ================= */
+  
   staff() {
     const draw = () => {
       const f = S.f, list = S.d.staff.filter(w => (f.st2 === 'all' || w.status === (f.st2 || 'active')) && (!f.q || (w.first + ' ' + w.last + ' ' + w.title).toLowerCase().includes(f.q.toLowerCase())));
@@ -172,7 +172,7 @@ const PAGES = {
     $('#pm').onchange = e => { if (e.target.value) { S.period = e.target.value; refresh(); } }; bindSearch('q', 'q', draw); $('#fs2').onchange = e => { f.st2 = e.target.value; draw(); }; $('#addw').onclick = () => staffForm(); draw();
   },
 
-  /* ================= Receipts ================= */
+  
   receipts() {
     const draw = () => {
       const f = S.f; const kinds = { all: 'All receipts', fees: 'School fees', admission: 'Admission fees', salary: "Teachers' salaries" };
@@ -191,14 +191,32 @@ const PAGES = {
     $$('[data-k]').forEach(b => b.onclick = () => { f.rcpt = b.dataset.k; PAGES.receipts(); }); bindSearch('q', 'q', draw); $('#df').onchange = e => { f.from = e.target.value; draw(); }; $('#dt').onchange = e => { f.to = e.target.value; draw(); }; draw();
   },
 
-  /* ================= Academic reports (read-only) ================= */
+  
   async reports() {
     page(head('Academic Reports') + '<div id="rv"></div>');
     reportsView = ReportsView($('#rv'), { note: '🔒 <b>Read-only.</b> Marks are entered by the Director of Studies on the Teachers\' PC and arrive here automatically. You can choose any year, term, exam and class, add your head teacher\'s remark, and print individual or whole-class reports.', getData: async y => { const r = await api('hm.marks', { year: y }); return { ...r, current: S.d.current }; }, saveRemark: (id, teacher, head) => api('hm.saveRemark', { id, teacher, head }) });
     await reportsView.start({ year: S.year, term: S.term });
   },
 
-  /* ================= Settings ================= */
+  
+  subjects() {
+    const acad=S.d.academic||{}, sub=acad.subjects||{};
+    page(`${head('Subjects by Class')}<div class="banner info">Subjects saved here appear on the Teachers' PC after synchronization and determine report-card subjects. Existing marks remain in the database.</div><div class="card"><div class="field"><label>Select class</label><select id="subClass">${CLASSES.map(c=>`<option>${esc(c)}</option>`).join('')}</select></div><div class="field"><label>Subjects (one per line)</label><textarea id="subjectLines" rows="10"></textarea></div><button class="pri" id="subjectSave">Save subjects for this class</button></div>`);
+    const load=()=>{const c=$('#subClass').value;$('#subjectLines').value=(sub[c]||subjectsFor(c)).join('\n');};$('#subClass').onchange=load;load();
+    $('#subjectSave').onclick=()=>run(async()=>{const c=$('#subClass').value;const names=$('#subjectLines').value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);await api('hm.setSubjects',{cls:c,subjects:names});toast('Subjects saved and queued for teachers');refresh();});
+  },
+  grading() {
+    const a=(S.d.academic?.grades||GRADES).map(g=>({...g}));
+    page(`${head('Grading Scale')}<div class="banner info">Grade boundaries are ordered from highest to lowest. The last grade must start at zero. Changes also affect how existing marks are displayed, including older reports.</div><div class="card"><div id="gradeRows"></div><div class="bar"><button id="addGrade">+ Add grade</button><button class="pri" id="saveGrades">Save grading scale</button></div></div>`);
+    const draw=()=>{$('#gradeRows').innerHTML=a.map((g,i)=>`<div class="bar" style="margin-bottom:10px"><div><label>Minimum mark</label><input style="width:110px" type="number" min="0" max="100" data-index="${i}" data-k="min" value="${g.min}"></div><div><label>Grade</label><input style="width:110px" data-index="${i}" data-k="g" value="${esc(g.g)}"></div><div style="flex:1"><label>Description</label><input style="width:100%" data-index="${i}" data-k="label" value="${esc(g.label)}"></div><button data-del="${i}" aria-label="Remove grade">Remove</button></div>`).join('');$$('[data-index]').forEach(el=>el.oninput=()=>a[+el.dataset.index][el.dataset.k]=el.dataset.k==='min'?Number(el.value):el.value);$$('[data-del]').forEach(el=>el.onclick=()=>{a.splice(+el.dataset.del,1);draw();});};draw();$('#addGrade').onclick=()=>{a.splice(a.length-1,0,{min:1,g:'New',label:'New grade'});draw();};$('#saveGrades').onclick=()=>run(async()=>{await api('hm.setGrades',{grades:a});toast('Grading scale saved');refresh();});
+  },
+  notifications() {
+    const categories=['School fees reminder','School fees warning','Send child home for school fees','Suspension','Expulsion','Custom'];
+    const records=S.d.notifications||[];
+    page(`${head('Parent Notifications')}<div class="banner info">Compose and save official notification drafts. Live SMS delivery is not enabled until the school's Africa's Talking gateway is connected securely.</div><div class="card"><div class="grid2"><div class="field"><label>Notification type</label><select id="notifCat">${categories.map(c=>`<option>${esc(c)}</option>`).join('')}</select></div><div class="field"><label>Recipients</label><select id="notifRecipients"><option value="balances">Parents with fee balances</option><option value="all">All parents</option><option value="discipline">Disciplinary case parents</option><option value="manual">Individual / custom</option></select></div></div><div class="field"><label>Subject / heading (editable)</label><input id="notifSubject" maxlength="120" placeholder="Type the message heading"></div><div class="field"><label>Message</label><textarea id="notifBody" rows="5" maxlength="1200" placeholder="Write the message here"></textarea></div><button class="pri" id="notifSave">Save notification draft</button></div><div class="card"><h3>Saved notifications</h3>${records.length?`<table class="t"><thead><tr><th>Date</th><th>Type</th><th>Subject</th><th>Status</th></tr></thead><tbody>${records.map(n=>`<tr><td>${esc(n.at.slice(0,10))}</td><td>${esc(n.category)}</td><td>${esc(n.subject)}</td><td>Draft — not sent</td></tr>`).join('')}</tbody></table>`:'<div class="empty">No notifications saved yet.</div>'}</div>`);
+    $('#notifCat').onchange=()=>{$('#notifSubject').value=$('#notifCat').value==='Custom'?'':$('#notifCat').value;};$('#notifCat').onchange();
+    $('#notifSave').onclick=()=>run(async()=>{await api('hm.saveNotification',{category:$('#notifCat').value,subject:$('#notifSubject').value,message:$('#notifBody').value,recipients:$('#notifRecipients').value});toast('Notification draft saved; no SMS sent');refresh();});
+  },
   async settings() {
     const st = await api('settings.get'), c = S.d.current; S.sync = st.cloud.status;
     page(`${head('Settings & Backup')}
@@ -240,7 +258,7 @@ alter table records enable row level security;</pre><button class="sm" id="cpsql
 };
 const kindChip = k => k === 'fees' ? chip('SCHOOL FEES', 'blue') : k === 'admission' ? chip('ADMISSION', 'amber') : chip('SALARY', 'grey');
 
-/* ================= Dialogs / actions ================= */
+
 function newApplication() {
   const m = modal('New application', `<form id="af"><div class="grid2"><div class="field"><label>First name *</label><input name="first" required></div><div class="field"><label>Surname *</label><input name="last" required></div>
   <div class="field"><label>Class applying for *</label><select name="className">${CLASSES.map(c => `<option>${c}</option>`).join('')}</select></div><div class="field"><label>Day or Boarding</label><select name="type"><option value="day">Day student</option><option value="boarding">Boarding student</option></select></div>
