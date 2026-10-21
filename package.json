@@ -6,7 +6,7 @@
   "main": "src/main.js",
   "scripts": {
     "start": "electron .",
-    "test": "node test-core.js && node test-net.js && node test-recovery.js",
+    "test": "node test-core.js && node test-net.js && node test-recovery.js && node test-sms.js",
     "dist": "electron-builder --win nsis portable --x64"
   },
   "devDependencies": {

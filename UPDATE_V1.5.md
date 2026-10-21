@@ -16,3 +16,11 @@
 
 ## Not changed
 Data format, cloud backup, restore, receipts and reports are unchanged. Back up your data before installing as usual.
+
+## SMS to parents (Africa's Talking)
+- Settings & Backup -> "SMS to parents": username, API key, optional sender name, and a "Send test SMS" button.
+- The API key is stored encrypted (Windows login), only on the Headteacher PC. It is not in the source code, the cloud backup, the data files or the Teachers' PCs, and is never shown again after saving.
+- Notifications: Send SMS button per saved message with a preview (how many parents, credits used, example text, who has no number) and a confirmation.
+- Placeholders {parent} {student} {class} {balance} are filled in for each parent. Numbers are converted to +256 format.
+- Each message keeps a per-parent delivery log; resending only goes to parents who have not yet received it, so nobody gets it twice.
+- Use username `sandbox` to test without spending credit.

@@ -37,6 +37,9 @@ function createApp({ dataDir, backupDir, notify = () => { }, enc = { enc: s => s
   const needHM = () => { if (!A.hm) throw new Fail('Not the Headteacher PC.'); if (!A.authed) throw new Fail('Please log in first.'); return A.hm; };
   const needT = () => { if (!A.authed) throw new Fail('Please log in first.'); if (!A.teacher) throw new Fail('Not the Teachers PC.'); return A.teacher; };
 
+  const smsCreds = () => { const c = cfg.sms; if (!c || !c.username || !c.key) throw new Fail('Set up the SMS account first (Settings & Backup).'); return { username: c.username, key: enc.dec(c.key), senderId: c.senderId || '' }; };
+  const smsSender = (...a) => require('./sms').sendBatch(...a);
+
   const H = {
     'mode.get': () => ({ mode: A.mode }),
     'mode.set': m => { if (A.mode && A.mode !== m) throw new Fail('This computer is already set up. Use Settings → Reset to change it.'); if (!['hm', 'teacher'].includes(m)) throw new Fail('Bad mode'); A.mode = cfg.mode = m; saveCfg(); init(); return { mode: m }; },
@@ -88,6 +91,25 @@ function createApp({ dataDir, backupDir, notify = () => { }, enc = { enc: s => s
     'hm.setSubjects': a => needHM().setSubjects(a.cls,a.subjects),
     'hm.setGrades': a => needHM().setGrades(a.grades),
     'hm.saveNotification': a => needHM().saveNotification(a),
+    'hm.previewNotification': a => needHM().previewNotification(a.id),
+    'hm.sendNotification': async a => { const hm = needHM(); if (a.confirm !== true) throw new Fail('Please confirm before sending.'); return hm.sendNotification(a.id, smsCreds(), smsSender); },
+    'sms.get': () => { needHM(); const c = cfg.sms || {}; return { username: c.username || '', senderId: c.senderId || '', hasKey: !!c.key }; },
+    'settings.sms': ({ username, key, senderId }) => {
+      needHM(); const old = cfg.sms || {}, u = String(username || '').trim();
+      if (!u) { cfg.sms = null; saveCfg(); return true; }
+      if (!/^[A-Za-z0-9_.-]{2,40}$/.test(u)) throw new Fail('The username can only contain letters, numbers and . _ -');
+      const sid = String(senderId || '').trim();
+      if (sid && !/^[A-Za-z0-9 ]{3,11}$/.test(sid)) throw new Fail('Sender name must be 3 to 11 letters or numbers.');
+      const k = String(key || '').trim();
+      if (!k && !old.key) throw new Fail('Paste the API key.');
+      cfg.sms = { username: u, senderId: sid, key: k ? enc.enc(k) : old.key }; saveCfg(); return true;
+    },
+    'sms.test': async ({ phone }) => {
+      needHM(); const to = require('./sms').normalizePhone(phone); if (!to) throw new Fail('Enter a valid Uganda phone number, e.g. 0772 123 456.');
+      const res = await smsSender(smsCreds(), [to], 'Bill Gates Junior School: SMS test. Your school system can now send messages to parents.');
+      if (!res[0] || !res[0].ok) throw new Fail('The SMS company did not accept the test message' + (res[0] && res[0].status ? ': ' + res[0].status : '.'));
+      return { to, cost: res[0].cost };
+    },
     'hm.addApplication': f => needHM().addApplication(f),
     'hm.payAdmission': a => needHM().payAdmission(a.id, a.amount, a.method, a.note),
     'hm.updateStudent': a => needHM().updateStudent(a.id, a.f),

@@ -26,6 +26,7 @@
 | Years & terms | Header selectors; each term's fees/receipts stay in that term; unpaid balances show as "earlier terms owed". |
 | Marks | Teachers' PC saves locally and sends to HM PC at once (retries if the network is down). HM view is read-only; HM can print any year/term/exam, individual or class. |
 | Teachers' PC privacy | Receives only name, admission no., class. Never fees, phones, salaries. |
+| SMS to parents | Headteacher's PC only. Settings & Backup -> SMS (Africa's Talking key), then Notifications -> Send SMS. |
 | Backup | Local backup every 6 h to `Documents\BGS-Backups`; every change is also queued to the cloud and retried until it succeeds. |
 
 ## Cloud (recommended: Supabase – free tier, Postgres, works well from Uganda)

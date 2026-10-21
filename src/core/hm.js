@@ -1,6 +1,7 @@
 'use strict';
 const crypto = require('crypto');
 const R = require('../shared/rules');
+const SMS = require('./sms');
 
 const DEFAULTS = {
   meta: { createdAt: null, pw: null, lanKey: null, hmId: null, counters: {}, current: null, seq: 0, admSeq: {} },
@@ -112,11 +113,64 @@ class HM {
   saveNotification(f) {
     const allowed=['School fees reminder','School fees warning','Send child home for school fees','Suspension','Expulsion','Custom'];
     if(!allowed.includes(f.category)) fail('Choose notification category.');
+    const groups=['balances','all','discipline','manual'];
+    if(!groups.includes(f.recipients||'manual')) fail('Choose who receives the message.');
+    if((f.recipients||'manual')==='manual' && !this.d.students[f.studentId]) fail('Search for and select a student.');
     const subject=String(f.subject||'').trim(), body=String(f.message||'').trim();
     if(!subject||subject.length>120||!body||body.length>1200) fail('Enter a subject and message (maximum 1,200 characters).');
     const id=require('crypto').randomUUID();
-    const rec={id,category:f.category,subject,message:body,recipients:f.recipients||'manual',studentId:f.studentId||null,at:nowISO(),status:'draft',sent:0};
+    const rec={id,category:f.category,subject,message:body,recipients:f.recipients||'manual',studentId:f.studentId||null,at:nowISO(),status:'draft',sent:0,failed:0,skipped:0,log:[]};
     this.d.notifications[id]=rec;this.touch('notifications',id);this.log('notification draft',subject);this.done();return rec;
+  }
+  notificationRecipients(rec) {
+    const all = this.getState().students;
+    let list;
+    if (rec.recipients === 'all') list = all.filter(s => s.status === 'active');
+    else if (rec.recipients === 'balances') list = all.filter(s => s.status === 'active' && s.fee.has && (s.fee.balance + s.fee.arrears) > 0);
+    else if (rec.recipients === 'discipline') { const ids = new Set(Object.values(this.d.discipline).filter(x => !x.cancelledAt).map(x => x.studentId)); list = all.filter(s => ids.has(s.id)); }
+    else list = all.filter(s => s.id === rec.studentId);
+    const done = new Set((rec.log || []).filter(x => x.ok).map(x => x.studentId));
+    return list.filter(s => !done.has(s.id)).map(s => ({
+      studentId: s.id, student: s.first + ' ' + s.last, className: s.className, parent: s.parent, phone: SMS.normalizePhone(s.phone),
+      text: SMS.fillTemplate(rec.message, { parent: s.parent || 'Parent', student: s.first + ' ' + s.last, class: s.className, balance: R.num(s.fee.balance + s.fee.arrears) }),
+    }));
+  }
+  previewNotification(id) {
+    const rec = this.d.notifications[id] || fail('Notification not found.');
+    const rs = this.notificationRecipients(rec), ok = rs.filter(r => r.phone);
+    return { id, subject: rec.subject, total: rs.length, sendable: ok.length, noPhone: rs.length - ok.length, segments: ok.reduce((a, r) => a + SMS.segments(r.text), 0), sample: ok[0] ? { to: ok[0].phone, student: ok[0].student, text: ok[0].text } : null, missing: rs.filter(r => !r.phone).slice(0, 8).map(r => r.student + ' (' + r.studentId + ')') };
+  }
+  async sendNotification(id, creds, sendBatch = SMS.sendBatch) {
+    const rec = this.d.notifications[id] || fail('Notification not found.');
+    if (!creds || !creds.username || !creds.key) fail('Set up the SMS account first (Settings & Backup).');
+    const rs = this.notificationRecipients(rec), ok = rs.filter(r => r.phone);
+    if (!ok.length) fail(rs.length ? 'None of these parents has a valid phone number saved.' : 'Everyone on this list has already been sent this message.');
+    let sent = 0, failed = 0, firstError = '';
+    const byText = new Map();
+    for (const r of ok) { if (!byText.has(r.text)) byText.set(r.text, []); byText.get(r.text).push(r); }
+    for (const [text, group] of byText) {
+      for (let i = 0; i < group.length; i += 50) {
+        const part = group.slice(i, i + 50);
+        try {
+          const res = await sendBatch(creds, part.map(r => r.phone), text);
+          for (const r of part) {
+            const x = res.find(y => y.phone === r.phone);
+            const good = !!(x && x.ok);
+            rec.log.push({ studentId: r.studentId, phone: r.phone, ok: good, status: x ? x.status : 'No answer', at: nowISO() });
+            if (good) sent++; else failed++;
+          }
+        } catch (e) {
+          firstError = firstError || e.message;
+          for (const r of part) { rec.log.push({ studentId: r.studentId, phone: r.phone, ok: false, status: e.message, at: nowISO() }); failed++; }
+        }
+      }
+    }
+    rec.log = rec.log.slice(-2000);
+    rec.sent = rec.log.filter(x => x.ok).length;
+    rec.failed = failed; rec.skipped = rs.length - ok.length;
+    rec.status = failed ? (rec.sent ? 'partial' : 'failed') : 'sent'; rec.sentAt = nowISO();
+    this.touch('notifications', id); this.log('notification sent', `${rec.subject}: ${sent} sent, ${failed} failed`); this.done();
+    return { sent, failed, skipped: rec.skipped, error: firstError, status: rec.status };
   }
   /* ---------- admissions & students ---------- */
   _need(v, label) { if (!String(v || '').trim()) fail(`${label} is required.`); return String(v).trim(); }
