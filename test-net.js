@@ -12,6 +12,13 @@ hm.log('first',{}); hm.log('second',{}); hm.touch('meta','current'); hm.touch('m
 const t=new Teacher(new Store(path.join(d,'t.json'),TD),()=>{},{discoveryPort:4800}); t.setConfig({hm:'127.0.0.1:4799',key:'WRONG',teacher:'Mr Okello'});
 await new Promise(r=>setTimeout(r,300)); assert(/school key is not accepted/.test(t.conn.error));
 t.setConfig({hm:'127.0.0.1:4799',key:hm.d.meta.lanKey.toLowerCase(),teacher:'Mr Okello'}); await new Promise(r=>setTimeout(r,400)); assert.equal(t.conn.state,'online'); assert.equal(t.d.students.length,1);
+// Headteacher updates must reach the Teachers PC without re-pairing or restarting.
+hm.setSubjects('P3', ['Mathematics', 'English', 'Robotics']);
+hm.setGrades([{min:85,g:'A',label:'Excellent'},{min:70,g:'B',label:'Good'},{min:0,g:'C',label:'Needs improvement'}]);
+await t.sync();
+assert.deepEqual(t.d.academic.subjects.P3, ['Mathematics','English','Robotics']);
+assert.equal(t.d.academic.grades[0].min,85);
+assert.equal(t.d.cfg.hmId, hm.d.meta.hmId);
 t.setMark({year:2026,term:3,exam:'BOT',studentId:id,className:'P3',subject:'Science',score:88}); await new Promise(r=>setTimeout(r,400));
 assert.equal(Object.keys(hm.d.marks).length,1); assert.equal(t.pending(),0);
 await cloud.flush(); assert(Object.keys(rows).some(k=>k.startsWith('marks:')));

@@ -14,7 +14,37 @@ async function boot() {
   root.innerHTML = `<div class="app"><aside class="side"><div class="brand"><i><img class="school-icon" src="../assets/bgs-icon.png" alt=""></i><div>Bill Gates Junior<small>Nsangi · Teachers' PC</small></div></div><nav class="nav" id="nav"></nav>
   <div class="bottom"><button id="teacherLock">${tabIcon("logout")} Lock / log out</button><div id="who" style="color:#9db6d8;font-size:.8rem;padding:0 6px 8px"></div></div></aside><section class="main"><div class="top"><b style="color:var(--navy)" id="ttl"></b><span class="sp"></span><span id="conn"></span></div><div class="page" id="page"></div></section></div>`;
   $('#teacherLock').onclick=async()=>{await api('auth.logout');location.reload();};
-  window.bgs.on(async () => { const was = T.st; T.st = await api('t.state'); configureAcademics(T.st.academic?.subjects,T.st.academic?.grades);paintConn(); if (T.page === 'conn' && PG.paintConnPage) PG.paintConnPage(); if (T.page === 'students' || (T.page === 'reports' && rv)) { if (!$('#modal') && T.page === 'reports') rv.refresh(); else if (T.page === 'students') draw(); } });
+  let lastAcademicVersion = JSON.stringify({ academic: T.st.academic, students: T.st.students, current: T.st.current });
+  let lastReportVersion = JSON.stringify({ marks: T.st.marks, comments: T.st.comments, promotions: T.st.promotions });
+  let refreshInProgress = false;
+  const refreshAfterEditing = () => {
+    if (T.page !== 'marks') return;
+    const active = document.activeElement;
+    if (active && active.matches && active.matches('.markin')) {
+      active.addEventListener('blur', () => { if (T.page === 'marks') draw(); }, { once: true });
+    } else draw();
+  };
+  window.bgs.on(async () => {
+    if (refreshInProgress) return;
+    refreshInProgress = true;
+    try {
+      const updated = await api('t.state');
+      const version = JSON.stringify({ academic: updated.academic, students: updated.students, current: updated.current });
+      const academicChanged = version !== lastAcademicVersion;
+      lastAcademicVersion = version;
+      const reportVersion = JSON.stringify({ marks: updated.marks, comments: updated.comments, promotions: updated.promotions });
+      const reportsChanged = reportVersion !== lastReportVersion;
+      lastReportVersion = reportVersion;
+      T.st = updated;
+      configureAcademics(T.st.academic?.subjects, T.st.academic?.grades);
+      paintConn();
+      if (T.page === 'conn' && PG.paintConnPage) PG.paintConnPage();
+      else if (academicChanged && T.page === 'marks') refreshAfterEditing();
+      else if (academicChanged && T.page === 'students') draw();
+      else if ((academicChanged || reportsChanged) && T.page === 'reports' && rv && !$('#modal')) await rv.refresh();
+      else if (academicChanged && T.page === 'promotions') draw();
+    } finally { refreshInProgress = false; }
+  });
   draw();
 }
 function paintConn() {

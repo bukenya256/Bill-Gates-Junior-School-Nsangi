@@ -7,7 +7,7 @@ const DEFAULTS = { cfg: { hm: '', key: '', teacher: '', hmId: '' }, students: []
 
 class Teacher {
   constructor(store, onChange, opts = {}) {
-    this.discoveryPort = opts.discoveryPort || DISCOVERY_PORT; this.lastFind = 0; this.s = store; this.d = store.data; this.d.academic ||= {subjects:null,grades:null}; R.configureAcademics(this.d.academic.subjects,this.d.academic.grades); this.d.promotions ||= {}; this.d.unsynced.promotions ||= {}; this.onChange = onChange || (() => { }); this.conn = { state: 'offline', error: '', last: null, address: '', searching: false }; this.busy = false; this.loop = setInterval(() => this.sync(), 8000); setTimeout(() => this.sync(), 500); }
+    this.discoveryPort = opts.discoveryPort || DISCOVERY_PORT; this.lastFind = 0; this.s = store; this.d = store.data; this.d.academic ||= {subjects:null,grades:null}; R.configureAcademics(this.d.academic.subjects,this.d.academic.grades); this.d.promotions ||= {}; this.d.unsynced.promotions ||= {}; this.onChange = onChange || (() => { }); this.conn = { state: 'offline', error: '', last: null, address: '', searching: false }; this.busy = false; this.loop = setInterval(() => this.sync(), opts.syncIntervalMs || 2000); setTimeout(() => this.sync(), 500); }
   pending() { return Object.keys(this.d.unsynced.marks).length + Object.keys(this.d.unsynced.comments).length + Object.keys(this.d.unsynced.promotions).length; }
   state() { return { cfg: { ...this.d.cfg }, students: this.d.students, academic:this.d.academic, current: this.d.current || R.detectTerm(R.localISO()), marks: Object.values(this.d.marks), comments: Object.values(this.d.comments), promotions: Object.values(this.d.promotions), conn: { ...this.conn, pending: this.pending() } }; }
   setConfig(c) {
@@ -63,7 +63,9 @@ class Teacher {
     } finally { this.conn.searching = false; this.lastFind = Date.now(); }
   }
   async sync() {
-    if (this.busy || !this.d.cfg.key) return; this.busy = true;
+    if (this.busy || !this.d.cfg.key) return;
+    const before = JSON.stringify({ academic: this.d.academic, students: this.d.students, current: this.d.current, marks: this.d.marks, comments: this.d.comments, promotions: this.d.promotions, conn: this.conn, pending: this.pending() });
+    this.busy = true;
     try {
       try { await this._syncOnce(); }
       catch (e) {
@@ -73,7 +75,10 @@ class Teacher {
     } catch (e) {
       const msg = e.auth ? e.message : (this.findNote || 'Looking for the Headteacher PC. Make sure it is switched on, the program is open and the Ethernet cable is plugged in on both computers.');
       this.conn = { ...this.conn, state: 'offline', error: msg, last: this.conn.last, address: this.d.cfg.hm };
-    } finally { this.busy = false; this.onChange(); }
+    } finally { this.busy = false;
+      const after = JSON.stringify({ academic: this.d.academic, students: this.d.students, current: this.d.current, marks: this.d.marks, comments: this.d.comments, promotions: this.d.promotions, conn: this.conn, pending: this.pending() });
+      if (after !== before) this.onChange();
+    }
   }
   async _syncOnce() {
     const u = this.d.unsynced, mk = Object.keys(u.marks), ck = Object.keys(u.comments), pk = Object.keys(u.promotions);
