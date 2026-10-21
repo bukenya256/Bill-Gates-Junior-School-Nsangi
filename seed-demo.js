@@ -1,4 +1,3 @@
-// builds a demo data folder: node seed-demo.js <dir>
 const fs=require('fs'),path=require('path');const dir=process.argv[2];fs.mkdirSync(dir,{recursive:true});
 fs.writeFileSync(path.join(dir,'config.json'),JSON.stringify({mode:'hm'}));
 const {Store}=require('./src/core/store'),{HM,DEFAULTS}=require('./src/core/hm');

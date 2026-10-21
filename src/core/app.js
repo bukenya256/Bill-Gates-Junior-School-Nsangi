@@ -2,11 +2,10 @@
 const fs = require('fs'), path = require('path'), os = require('os'), crypto = require('crypto'), { execFile } = require('child_process');
 const { Store } = require('./store'), { HM, DEFAULTS, Fail } = require('./hm'), { startServer } = require('./server'), { Cloud } = require('./cloud'), { Teacher, DEFAULTS: TDEF } = require('./teacher');
 
-/** Everything the screens can ask for. Used by Electron (main.js) and by the browser test harness (dev-server.js). */
 function createApp({ dataDir, backupDir, notify = () => { }, enc = { enc: s => s, dec: s => s }, port = 4750 }) {
   fs.mkdirSync(dataDir, { recursive: true });
   const cfgFile = path.join(dataDir, 'config.json');
-  let cfg = {}; try { cfg = JSON.parse(fs.readFileSync(cfgFile, 'utf8')); } catch (e) { /* first run */ }
+  let cfg = {}; try { cfg = JSON.parse(fs.readFileSync(cfgFile, 'utf8')); } catch (e) {  }
   const saveCfg = () => fs.writeFileSync(cfgFile, JSON.stringify(cfg));
   const A = { mode: cfg.mode || null, hm: null, cloud: null, server: null, teacher: null, authed: false, timers: [] };
 
@@ -26,7 +25,7 @@ function createApp({ dataDir, backupDir, notify = () => { }, enc = { enc: s => s
       A.hm = new HM(new Store(path.join(dataDir, 'hm-data.json'), DEFAULTS), { onChange: () => { A.cloud && A.cloud.kick(); notify('changed'); } });
       A.cloud = new Cloud(A.hm, () => cfg.cloud ? { url: cfg.cloud.url, key: enc.dec(cfg.cloud.key) } : null, () => notify('sync'));
       A.server = startServer(A.hm, port);
-      try { backupNow(true); } catch (e) { /* backups are best-effort */ }
+      try { backupNow(true); } catch (e) {  }
       A.timers.push(setInterval(() => { try { A.hm.s.flush(); const current=fs.readFileSync(path.join(dataDir,'hm-data.json'),'utf8'); if(current!==lastBackupContent) backupNow(true); } catch(e) { console.error('Automatic local backup failed:', e.message); } },30000));
       setTimeout(() => A.cloud && A.cloud.flush(), 3000);
     }
@@ -56,19 +55,19 @@ function createApp({ dataDir, backupDir, notify = () => { }, enc = { enc: s => s
     'cloud.restore': async ({confirm}) => {
       const hm=needHM(); if(confirm!=='RESTORE SCHOOL') throw new Fail('Type RESTORE SCHOOL to confirm.');
       if(A.cloud.busy) throw new Fail('Cloud synchronization is running. Please try again.');
-      // Stop automatic cloud writes during the entire operation.
+
       A.cloud.stop(); A.cloud.busy=true;
       try {
         const rows=await A.cloud.download(), r=A.cloud.buildRecovery(rows);
         const existing=hm.d;
-        // Cloud deliberately never contains the HM password, preserve the local replacement-PC login.
+
         r.data.meta.pw=existing.meta.pw;
         r.data.meta.lanKey=existing.meta.lanKey;
         r.data.meta.hmId=existing.meta.hmId;
         r.data.meta.createdAt=existing.meta.createdAt;
         r.data.meta.seq=Math.max(0,...Object.values(r.data.marks).map(m=>Number(m.seq)||0),...Object.values(r.data.comments).map(m=>Number(m.seq)||0));
         r.data.dirty={};
-        backupNow(false); // unconditionally save current data to an independent dated backup
+        backupNow(false);
         hm.s.data=r.data; hm.d=r.data; hm.s.save(true);
         A.cloud.st.error=''; A.cloud.st.last=new Date().toISOString();
         return {records:r.valid,counts:r.counts};
@@ -85,7 +84,7 @@ function createApp({ dataDir, backupDir, notify = () => { }, enc = { enc: s => s
     'backup.now': () => ({ file: backupNow(false) }),
     'settings.newKey': () => { const hm = needHM(); hm.d.meta.lanKey = require('crypto').randomBytes(4).toString('hex').toUpperCase().replace(/(.{4})/, '$1-'); hm.done(); return hm.d.meta.lanKey; },
     'app.reset': () => { if (A.hm) needHM(); cfg.mode = null; saveCfg(); return { restart: true }; },
-    // headteacher data
+
     'hm.state': a => needHM().getState(a),
     'hm.marks': ({ year }) => needHM().getMarks(year),
     'hm.setSubjects': a => needHM().setSubjects(a.cls,a.subjects),
@@ -125,7 +124,7 @@ function createApp({ dataDir, backupDir, notify = () => { }, enc = { enc: s => s
     'hm.voidPayment': a => needHM().voidPayment(a.id, a.reason),
     'hm.setCurrentTerm': a => needHM().setCurrentTerm(a.year, a.term),
     'hm.saveRemark': a => { needHM().saveHeadRemark(a.id, a.teacher, a.head); return true; },
-    // teachers' PC
+
     't.state': () => needT().state(),
     't.setConfig': c => { needT().setConfig(c); return true; },
     't.setMark': m => needT().setMark(m),

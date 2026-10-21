@@ -4,7 +4,7 @@ const { discover, DISCOVERY_PORT } = require('./discovery');
 const { normKey } = require('./server');
 const nowISO = () => new Date().toISOString();
 const DEFAULTS = { cfg: { hm: '', key: '', teacher: '', hmId: '' }, students: [], current: null, marks: {}, comments: {}, promotions: {}, unsynced: { marks: {}, comments: {}, promotions: {} }, lastSeq: 0, academic: {subjects:null,grades:null} };
-/** The Teachers' PC: own local copy of marks (saved immediately), auto-forwarded to the Headteacher PC. */
+
 class Teacher {
   constructor(store, onChange, opts = {}) {
     this.discoveryPort = opts.discoveryPort || DISCOVERY_PORT; this.lastFind = 0; this.s = store; this.d = store.data; this.d.academic ||= {subjects:null,grades:null}; R.configureAcademics(this.d.academic.subjects,this.d.academic.grades); this.d.promotions ||= {}; this.d.unsynced.promotions ||= {}; this.onChange = onChange || (() => { }); this.conn = { state: 'offline', error: '', last: null, address: '', searching: false }; this.busy = false; this.loop = setInterval(() => this.sync(), 8000); setTimeout(() => this.sync(), 500); }

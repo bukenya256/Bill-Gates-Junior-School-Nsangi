@@ -1,5 +1,5 @@
 'use strict';
-/** Cloud backup (Supabase REST). Every change marks a record "dirty"; dirty records are pushed immediately, and retried until they succeed. */
+
 class Cloud {
   constructor(hm, getCfg, onStatus) { this.hm = hm; this.getCfg = getCfg; this.onStatus = onStatus || (() => { }); this.busy = false; this.timer = null; this.st = { state: 'off', pending: 0, last: null, error: '' }; this.loop = setInterval(() => this.flush(), 15000); this.refresh(); }
   status() { this.st.pending = Object.keys(this.hm.d.dirty).length; return this.st; }
@@ -13,8 +13,7 @@ class Cloud {
     const v = d[col] && d[col][id]; return v ? { key: `${col}:${id}`, collection: col, data: v } : null;
   }
   async _post(c, rows) {
-    // PostgreSQL cannot update one ON CONFLICT target twice in a single statement.
-    // Multiple dirty audit/meta entries deliberately resolve to the same cloud key.
+
     const unique = [...new Map(rows.map(row => [row.key, row])).values()];
     const r = await fetch(c.url.replace(/\/+$/, '') + '/rest/v1/records?on_conflict=key', { method: 'POST', headers: { apikey: c.key, Authorization: 'Bearer ' + c.key, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify(unique), signal: AbortSignal.timeout(20000) });
     if (!r.ok) throw new Error(`Cloud said ${r.status}: ${(await r.text()).slice(0, 200)}`);

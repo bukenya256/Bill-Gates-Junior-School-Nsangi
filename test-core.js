@@ -17,9 +17,9 @@ hm.setStudentStatus(id,'inactive','indiscipline'); hm.setStudentStatus(id,'activ
 const w=hm.addStaff({first:'Moses',last:'K',title:'Teacher',salary:'300,000'});
 hm.paySalary(w.id,'2026-10',200000); let sw=hm.getState({period:'2026-10'}).staff[0]; assert.equal(sw.period.balance,100000);
 hm.setStaffStatus(w.id,'inactive'); assert.equal(hm.getState().staff.length,1);
-// new term: arrears + new bill
+
 hm.setCurrentTerm(2027,1); st=hm.getState().students[0]; assert.equal(st.fee.arrears,250000); assert.equal(st.fee.due,500000);
-// marks
+
 assert.equal(hm.acceptMarks([{id:'2026|3|BOT|'+id+'|Mathematics',year:2026,term:3,exam:'BOT',studentId:id,className:'P5',subject:'Mathematics',score:77,at:new Date().toISOString()}]),1);
 assert.equal(hm.acceptMarks([{id:'x',studentId:id,score:500,at:'z'}]),0);
 assert.equal(hm.teacherSnapshot(0).marks.length,1);

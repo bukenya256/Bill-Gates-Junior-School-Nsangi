@@ -1,4 +1,3 @@
-// Browser test harness: serves the same screens over http and bridges window.bgs to the real core logic.
 const http=require('http'),fs=require('fs'),path=require('path'),os=require('os');
 const {createApp}=require('./src/core/app');
 const [,, dataDir=fs.mkdtempSync(path.join(os.tmpdir(),'bgsdev-')), port=5001, lan=4750]=process.argv;

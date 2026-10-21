@@ -22,13 +22,12 @@ class HM {
     if (!m.current) m.current = R.detectTerm(R.localISO());
     store.save(true);
   }
-  /* ---------- plumbing ---------- */
+
   touch(col, id) { this.d.dirty[col + ':' + id] = (this.d.dirty[col + ':' + id] || 0) + 1; }
   log(action, detail) { this.d.audit.push({ at: nowISO(), action, detail }); if (this.d.audit.length > 3000) this.d.audit.splice(0, 500); this.touch('audit', this.d.audit.length); }
   done(now = true) { this.s.save(now); this.hooks.onChange && this.hooks.onChange(); }
   cur() { return this.d.meta.current; }
 
-  /* ---------- password ---------- */
   hasPassword() { return !!this.d.meta.pw; }
   _hash(pw, salt) { return crypto.scryptSync(pw, salt, 32).toString('hex'); }
   setPassword(pw, old) {
@@ -42,7 +41,6 @@ class HM {
     return crypto.timingSafeEqual(a, b);
   }
 
-  /* ---------- fees / bills ---------- */
   sumPaid(pred) { let t = 0; for (const p of Object.values(this.d.payments)) if (!p.void && pred(p)) t += p.amount; return t; }
   admissionPaid(sid) { return this.sumPaid(p => p.kind === 'admission' && p.studentId === sid); }
   feesPaid(sid, y, t) { return this.sumPaid(p => p.kind === 'fees' && p.studentId === sid && p.year === y && p.term === t); }
@@ -67,7 +65,6 @@ class HM {
     return { has: !!b, due, paid, balance: Math.max(0, due - paid), arrears, type: b ? b.type : s.type, status: !b ? 'none' : due - paid <= 0 ? 'paid' : paid > 0 ? 'partial' : 'unpaid' };
   }
 
-  /* ---------- salaries ---------- */
   salaryDemand(st, period) {
     const sb = this.d.salaryBills[`${st.id}|${period}`];
     if (sb) return sb.demand;
@@ -75,11 +72,10 @@ class HM {
   }
   salaryPaid(stid, period) { return this.sumPaid(p => p.kind === 'salary' && p.staffId === stid && p.period === period); }
 
-  /* ---------- state for the screens ---------- */
   getState({ year, term, period } = {}) {
     const c = this.cur(); year = Number(year) || c.year; term = Number(term) || c.term;
     period = period || `${year}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
-    // make sure everybody active has this term's bill (only for terms up to the current one)
+
     const students = Object.values(this.d.students).map(s => {
       const fee = this.feeRow(s, year, term), ap = this.admissionPaid(s.id);
       return { ...s, admission: { fee: R.ADMISSION_FEE, paid: ap, balance: Math.max(0, R.ADMISSION_FEE - ap), status: ap >= R.ADMISSION_FEE ? 'paid' : 'pending' }, fee, termFee: R.feeFor(s.className, s.type) };
@@ -172,7 +168,7 @@ class HM {
     this.touch('notifications', id); this.log('notification sent', `${rec.subject}: ${sent} sent, ${failed} failed`); this.done();
     return { sent, failed, skipped: rec.skipped, error: firstError, status: rec.status };
   }
-  /* ---------- admissions & students ---------- */
+
   _need(v, label) { if (!String(v || '').trim()) fail(`${label} is required.`); return String(v).trim(); }
   addApplication(f) {
     const first = this._need(f.first, 'First name'), last = this._need(f.last, 'Surname');
@@ -232,7 +228,7 @@ class HM {
     const rec = { end: action === 'suspension' ? (end || '') : '', id, studentId, studentName: s.first + ' ' + s.last, className: s.className, action, reason: String(reason).trim().slice(0,1200), notes: String(notes || '').trim().slice(0,1200), date: date || R.localISO(), at: nowISO(), recordedBy: 'Headteacher' };
     this.d.discipline[id] = rec; this.touch('discipline', id);
     if (action === 'expulsion') { s.status = 'inactive'; s.statusNote = 'Expelled: ' + rec.reason; s.statusChangedOn = rec.date; this.touch('students', s.id); }
-    // Suspension is a recorded temporary action, not an irreversible deletion or expulsion.
+
     this.log('disciplinary ' + action, `${s.id}: ${rec.reason}`); this.done(); return rec;
   }
   cancelDiscipline({id,reason}) {
@@ -263,7 +259,6 @@ class HM {
     this.d.promotions[key] = rec; this.touch('promotions', key); this.log('promotion decision', `${studentId}: ${decision} for ${year}`); this.done(); return rec;
   }
 
-  /* ---------- school fees ---------- */
   payFees(sid, year, term, amount, method, note) {
     const s = this.d.students[sid] || fail('Student not found.'); year = Number(year); term = Number(term);
     if (s.status === 'pending') fail('Complete the admission fee first.');
@@ -276,7 +271,6 @@ class HM {
     this.done(); return p;
   }
 
-  /* ---------- staff ---------- */
   addStaff(f) {
     const first = this._need(f.first, 'First name'), last = this._need(f.last, 'Surname'), title = this._need(f.title, 'Job title'), salary = R.parseMoney(f.salary);
     if (salary <= 0) fail('Enter the monthly salary.');
@@ -314,7 +308,6 @@ class HM {
     p.void = true; p.voidReason = String(reason).trim(); p.voidAt = nowISO(); this.touch('payments', id); this.log('receipt cancelled', `${id}: ${p.voidReason}`); this.done(); return p;
   }
 
-  /* ---------- receipts ---------- */
   _receipt(p) {
     const pre = { admission: 'ADM', fees: 'FEE', salary: 'SAL' }[p.kind], c = this.d.meta.counters; c[p.kind] = (c[p.kind] || 0) + 1;
     const no = `BGS-${pre}-${String(c[p.kind]).padStart(5, '0')}`; const now = new Date();
@@ -322,14 +315,13 @@ class HM {
     this.d.payments[no] = rec; this.touch('payments', no); this.log('receipt', `${no} ${rec.amount}`); return rec;
   }
 
-  /* ---------- term control ---------- */
   setCurrentTerm(year, term) {
     year = Number(year); term = Number(term); if (![1, 2, 3].includes(term) || year < 2020 || year > 2100) fail('Invalid year/term.');
     const previous = this.cur();
     if (R.termIdx(year,term) < R.termIdx(previous.year,previous.term)) fail('Cannot roll back the current term. Use the year and term selectors to view historical records.');
     if (year > previous.year) {
       if (term !== 1 || year !== previous.year + 1 || previous.term !== 3) fail('Finish Term 3 and start the next academic year at Term 1.');
-      // Only recorded decisions move pupils. Others remain in the same class pending review.
+
       for (const s of Object.values(this.d.students)) {
         const rec = this.d.promotions[`${previous.year}|${s.id}`];
         if (!rec || rec.applied || s.status !== 'active') continue;
@@ -345,11 +337,10 @@ class HM {
       }
     }
     this.d.meta.current = { year, term }; this.log('current term', `${year} T${term}`);
-    for (const s of Object.values(this.d.students)) if (s.status === 'active') this.bill(s, year, term);   // new term bills use today's class & day/boarding type
+    for (const s of Object.values(this.d.students)) if (s.status === 'active') this.bill(s, year, term);
     this.touch('meta', 'current'); this.done(); return this.d.meta.current;
   }
 
-  /* ---------- marks from teachers (read-only on this PC) ---------- */
   nextSeq() { return ++this.d.meta.seq; }
   acceptMarks(marks = [], comments = [], device = '') {
     let a = 0;
