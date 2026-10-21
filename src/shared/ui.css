@@ -75,7 +75,6 @@ details{margin:8px 0}summary{cursor:pointer;font-weight:700;color:var(--blue)}
 .chip.g-A,.chip.g-B{background:var(--greenbg);color:var(--green)}.chip.g-C,.chip.g-D{background:var(--blue2);color:var(--blue)}.chip.g-E,.chip.g-F{background:var(--redbg);color:var(--red)}
 .nm{display:flex;align-items:center;gap:8px;white-space:nowrap}.nm .avatar{margin:0;flex:0 0 30px}
 
-
 body{font-size:16.5px;line-height:1.52;letter-spacing:.003em}
 .app{grid-template-columns:254px 1fr}
 .side{padding:17px 12px;background:linear-gradient(175deg,#102b4e 0%,#091c35 100%)}
@@ -109,7 +108,6 @@ label{font-size:.92rem;color:#40536a}
 @media(max-width:980px){.app{grid-template-columns:212px 1fr}.page{padding:18px}.side{padding:12px 8px}.t th,.t td{padding:9px 8px}}
 @media print{body{font-size:11pt}.side,.top{display:none!important}.app{display:block}.page{padding:0}}
 
-
 .tab-icon{width:23px;height:23px;object-fit:contain;flex:0 0 23px;filter:brightness(0) invert(1);opacity:.94}
 .nav button.on .tab-icon{opacity:1}
 .school-icon{width:38px;height:38px;object-fit:contain;filter:brightness(0) invert(1)}
@@ -122,9 +120,20 @@ label{font-size:.92rem;color:#40536a}
 
 .nav button{min-height:46px;gap:12px}.tab-icon{width:26px;height:26px;flex-basis:26px;filter:brightness(0) invert(1)}.brand .school-icon{filter:none;background:white;border-radius:7px;padding:2px}.top{min-height:62px}.nav button{font-size:15px}
 
-/* Navigation image clarity */
 .nav .tab-icon,.side .bottom .tab-icon{filter:none!important;opacity:1!important;background:#fff;border-radius:6px;padding:3px;object-fit:contain;box-sizing:border-box}
 .nav button.on .tab-icon{background:#fff}
 
-/* Form usability and responsive subject/recipient controls */
 .mc{position:relative;z-index:51;overscroll-behavior:contain}.mb input,.mb textarea,.mb select{pointer-events:auto;user-select:text;-webkit-user-select:text}form#af{display:block}form#af input{opacity:1;visibility:visible}.subject-row{display:flex;align-items:center;gap:12px;margin:9px 0;padding:9px 11px;background:#f7f9fc;border:1px solid #dfe6ef;border-radius:10px}.subject-row input{flex:1;width:100%;min-width:0}.subject-number{font-weight:800;color:#253d58;min-width:24px}.student-results{display:grid;gap:5px;max-height:220px;overflow:auto;margin:6px 0}.student-choice{display:block;width:100%;text-align:left;background:#f7f9fc;padding:10px;border:1px solid #dfe6ef;border-radius:8px}.student-choice:hover{background:#e9f2ff}
+
+.banner.ok{background:var(--greenbg);border-color:#b8e0cf;color:#0d5c42}
+.conn-card{max-width:680px}
+button:focus-visible,a:focus-visible,summary:focus-visible{outline:3px solid #ffc18f;outline-offset:2px}
+button.pri,button.ok{box-shadow:0 1px 2px rgba(15,39,71,.18)}
+button:active:not(:disabled){transform:translateY(1px)}
+.mc{animation:pop .16s ease-out}
+@keyframes pop{from{opacity:0;transform:translateY(8px) scale(.985)}to{opacity:1;transform:none}}
+::-webkit-scrollbar{width:11px;height:11px}::-webkit-scrollbar-thumb{background:#c3cddb;border-radius:8px;border:3px solid transparent;background-clip:padding-box}::-webkit-scrollbar-thumb:hover{background:#a9b6c8;background-clip:padding-box;border:3px solid transparent}
+.t td .sub,.t th{user-select:none}
+.empty{border-radius:12px;padding:34px}
+.keybox{user-select:all}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}

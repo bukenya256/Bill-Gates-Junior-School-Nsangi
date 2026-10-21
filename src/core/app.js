@@ -1,5 +1,5 @@
 'use strict';
-const fs = require('fs'), path = require('path'), os = require('os'), crypto = require('crypto');
+const fs = require('fs'), path = require('path'), os = require('os'), crypto = require('crypto'), { execFile } = require('child_process');
 const { Store } = require('./store'), { HM, DEFAULTS, Fail } = require('./hm'), { startServer } = require('./server'), { Cloud } = require('./cloud'), { Teacher, DEFAULTS: TDEF } = require('./teacher');
 
 /** Everything the screens can ask for. Used by Electron (main.js) and by the browser test harness (dev-server.js). */
@@ -30,7 +30,7 @@ function createApp({ dataDir, backupDir, notify = () => { }, enc = { enc: s => s
       A.timers.push(setInterval(() => { try { A.hm.s.flush(); const current=fs.readFileSync(path.join(dataDir,'hm-data.json'),'utf8'); if(current!==lastBackupContent) backupNow(true); } catch(e) { console.error('Automatic local backup failed:', e.message); } },30000));
       setTimeout(() => A.cloud && A.cloud.flush(), 3000);
     }
-    if (A.mode === 'teacher' && !A.teacher) A.teacher = new Teacher(new Store(path.join(dataDir, 'teacher-data.json'), TDEF), () => notify('changed'));
+    if (A.mode === 'teacher' && !A.teacher) A.teacher = new Teacher(new Store(path.join(dataDir, 'teacher-data.json'), TDEF), () => notify('changed'), { discoveryPort: port + 1 });
   }
   init();
   const lanIps = () => Object.values(os.networkInterfaces()).flat().filter(i => i && i.family === 'IPv4' && !i.internal).map(i => i.address);
@@ -45,7 +45,7 @@ function createApp({ dataDir, backupDir, notify = () => { }, enc = { enc: s => s
     'auth.login': ({ pw }) => { if (!A.hm && A.teacher) { const p=cfg.teacherPassword;if(!p)throw new Fail('Set a password first.');const a=crypto.scryptSync(String(pw||''),p.salt,32),b=Buffer.from(p.hash,'hex');if(a.length!==b.length||!crypto.timingSafeEqual(a,b))throw new Fail('Wrong password.');A.authed=true;return true; } if (!A.hm) throw new Fail('Not the Headteacher PC.'); if (!A.hm.checkPassword(pw)) throw new Fail('Wrong password.'); A.authed = true; return true; },
     'auth.logout': () => { A.authed = false; return true; },
     'auth.change': ({ old, pw }) => { if(A.teacher) {needT(); const p=cfg.teacherPassword;if(!p||!crypto.timingSafeEqual(crypto.scryptSync(String(old||''),p.salt,32),Buffer.from(p.hash,'hex')))throw new Fail('Old password is wrong.');if(String(pw||'').length<8)throw new Fail('Use at least 8 characters.'); const salt=crypto.randomBytes(16).toString('hex');cfg.teacherPassword={salt,hash:crypto.scryptSync(pw,salt,32).toString('hex')};saveCfg();return true;} needHM().setPassword(pw, old); return true; },
-    'settings.get': () => { const hm = needHM(); return { lan: { ips: lanIps(), port, key: hm.d.meta.lanKey, error: A.server && A.server.lastError }, cloud: { url: cfg.cloud ? cfg.cloud.url : '', hasKey: !!(cfg.cloud && cfg.cloud.key), status: A.cloud.status() }, backupDir, dataDir }; },
+    'settings.get': () => { const hm = needHM(); return { lan: { ips: lanIps(), port, key: hm.d.meta.lanKey, error: A.server && (A.server.lastError || A.server.discoveryError()), peers: A.server ? A.server.peers() : [], windows: process.platform === 'win32' }, cloud: { url: cfg.cloud ? cfg.cloud.url : '', hasKey: !!(cfg.cloud && cfg.cloud.key), status: A.cloud.status() }, backupDir, dataDir }; },
     'settings.cloud': ({ url, key }) => { needHM(); cfg.cloud = { url: String(url || '').trim(), key: key ? enc.enc(String(key).trim()) : (cfg.cloud ? cfg.cloud.key : '') }; if (!cfg.cloud.url) cfg.cloud = null; saveCfg(); A.cloud.st.error = ''; A.cloud.kick(); return true; },
     'cloud.test': async () => { needHM(); await A.cloud.test(); return true; },
      'cloud.pushAll': async () => { needHM(); if (!Object.keys(A.hm.d.students).length) throw new Fail('Cannot push an empty school database. Use Restore from Supabase first.'); await A.cloud.flush(true); return A.cloud.status(); },
@@ -61,6 +61,7 @@ function createApp({ dataDir, backupDir, notify = () => { }, enc = { enc: s => s
         // Cloud deliberately never contains the HM password, preserve the local replacement-PC login.
         r.data.meta.pw=existing.meta.pw;
         r.data.meta.lanKey=existing.meta.lanKey;
+        r.data.meta.hmId=existing.meta.hmId;
         r.data.meta.createdAt=existing.meta.createdAt;
         r.data.meta.seq=Math.max(0,...Object.values(r.data.marks).map(m=>Number(m.seq)||0),...Object.values(r.data.comments).map(m=>Number(m.seq)||0));
         r.data.dirty={};
@@ -70,6 +71,14 @@ function createApp({ dataDir, backupDir, notify = () => { }, enc = { enc: s => s
         return {records:r.valid,counts:r.counts};
       } finally {A.cloud.busy=false; A.cloud.loop=setInterval(()=>A.cloud.flush(),15000); A.cloud.refresh(); notify('changed');}
     },
+    'net.firewall': () => new Promise((resolve, reject) => {
+      if (process.platform !== 'win32') return reject(new Fail('This step is only needed on Windows.'));
+      needHM();
+      const rule = 'BGS School System';
+      const inner = `netsh advfirewall firewall delete rule name="${rule}" & netsh advfirewall firewall add rule name="${rule}" dir=in action=allow protocol=TCP localport=${port} profile=any & netsh advfirewall firewall add rule name="${rule} Discovery" dir=in action=allow protocol=UDP localport=${port + 1} profile=any`;
+      const ps = `Start-Process -FilePath cmd.exe -ArgumentList '/c ${inner.replace(/'/g, "''")}' -Verb RunAs -WindowStyle Hidden -Wait`;
+      execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', ps], { timeout: 120000, windowsHide: true }, err => err ? reject(new Fail('Windows did not allow the change. Click Yes when Windows asks for permission, then try again.')) : resolve(true));
+    }),
     'backup.now': () => ({ file: backupNow(false) }),
     'settings.newKey': () => { const hm = needHM(); hm.d.meta.lanKey = require('crypto').randomBytes(4).toString('hex').toUpperCase().replace(/(.{4})/, '$1-'); hm.done(); return hm.d.meta.lanKey; },
     'app.reset': () => { if (A.hm) needHM(); cfg.mode = null; saveCfg(); return { restart: true }; },
@@ -100,6 +109,7 @@ function createApp({ dataDir, backupDir, notify = () => { }, enc = { enc: s => s
     't.setMark': m => needT().setMark(m),
     't.setComment': a => { needT().setComment(a.id, a.teacher, a.head); return true; },
     't.setPromotion': a => needT().setPromotion(a),
+    't.find': async () => { const t = needT(); t.lastFind = 0; const found = await t.findHM(); await t.sync(); return { found, note: t.findNote || '' }; },
     't.syncNow': async () => { await needT().sync(); return true; },
   };
   return {

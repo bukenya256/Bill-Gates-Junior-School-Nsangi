@@ -3,7 +3,7 @@ const crypto = require('crypto');
 const R = require('../shared/rules');
 
 const DEFAULTS = {
-  meta: { createdAt: null, pw: null, lanKey: null, counters: {}, current: null, seq: 0, admSeq: {} },
+  meta: { createdAt: null, pw: null, lanKey: null, hmId: null, counters: {}, current: null, seq: 0, admSeq: {} },
   students: {}, staff: {}, payments: {}, bills: {}, salaryBills: {}, marks: {}, comments: {}, discipline: {}, promotions: {}, notifications: {}, academic: {subjects: null, grades: null}, audit: [], dirty: {},
 };
 const nowISO = () => new Date().toISOString();
@@ -17,6 +17,7 @@ class HM {
     const m = this.d.meta;
     if (!m.createdAt) m.createdAt = nowISO();
     if (!m.lanKey) m.lanKey = crypto.randomBytes(4).toString('hex').toUpperCase().replace(/(.{4})/, '$1-');
+    if (!m.hmId) m.hmId = crypto.randomBytes(8).toString('hex');
     if (!m.current) m.current = R.detectTerm(R.localISO());
     store.save(true);
   }
@@ -30,7 +31,7 @@ class HM {
   hasPassword() { return !!this.d.meta.pw; }
   _hash(pw, salt) { return crypto.scryptSync(pw, salt, 32).toString('hex'); }
   setPassword(pw, old) {
-    if (String(pw || '').length < 4) fail('Password must be at least 4 characters.');
+    if (String(pw || '').length < 6) fail('Password must be at least 6 characters.');
     if (this.d.meta.pw && !this.checkPassword(old)) fail('The current password is wrong.');
     const salt = crypto.randomBytes(16).toString('hex'); this.d.meta.pw = { salt, hash: this._hash(pw, salt) }; this.done();
   }

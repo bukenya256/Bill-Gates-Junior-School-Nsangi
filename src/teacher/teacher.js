@@ -2,30 +2,30 @@ const tabIcon = k => `<img class="tab-icon" src="${({"dashboard":"../assets/dash
 'use strict';
 const T = { page: 'marks', st: null, year: null, term: null, exam: 'BOT', cls: 'P1', subject: null };
 const root = $('#root'); let rv = null;
-const NAV = [['marks', '✏️', 'Enter Marks'], ['reports', '📊', 'Report Cards & Class Results'], ['students', '🎓', 'Student List'], ['promotions', '🎓', 'Term 3 Promotions'], ['conn', '🔗', 'Connection']];
+const NAV = [['marks', 'Enter Marks'], ['reports', 'Report Cards & Class Results'], ['students', 'Student List'], ['promotions', 'Term 3 Promotions'], ['conn', 'Connection']];
 
 async function boot() {
   const a=await api('auth.status');
   if(!a.authed){root.innerHTML=`<div class="center-body"><form class="login" id="teacherLogin"><div class="logo"><img class="login-icon" src="../assets/bgs-icon.png" alt=""></div><h2>Teachers' Portal</h2><p class="muted">${a.hasPassword?'Enter your password':'Create a password for this Teachers PC'}</p><input type="password" id="teacherPW" required placeholder="Password (minimum 8 characters)">${a.hasPassword?'':'<input type="password" id="teacherConfirm" placeholder="Confirm password" required>'}<button class="pri">${a.hasPassword?'Unlock Teachers Portal':'Create password'}</button><p class="err" id="teacherErr"></p></form></div>`;$('#teacherLogin').onsubmit=async e=>{e.preventDefault();try{const pw=$('#teacherPW').value;if(!a.hasPassword&&pw!==$('#teacherConfirm').value)throw new Error('Passwords do not match');await api(a.hasPassword?'auth.login':'auth.setup',{pw});boot();}catch(err){$('#teacherErr').textContent=err.message;}};return;}
   T.st = await api('t.state');
-  if (!T.st.cfg.teacher || !T.st.cfg.hm || !T.st.cfg.key) { T.page = 'conn'; }
+  if (!T.st.cfg.teacher || !T.st.cfg.key) { T.page = 'conn'; }
   configureAcademics(T.st.academic?.subjects,T.st.academic?.grades);
   T.year = T.st.current.year; T.term = T.st.current.term;
   root.innerHTML = `<div class="app"><aside class="side"><div class="brand"><i><img class="school-icon" src="../assets/bgs-icon.png" alt=""></i><div>Bill Gates Junior<small>Nsangi · Teachers' PC</small></div></div><nav class="nav" id="nav"></nav>
   <div class="bottom"><button id="teacherLock">${tabIcon("logout")} Lock / log out</button><div id="who" style="color:#9db6d8;font-size:.8rem;padding:0 6px 8px"></div></div></aside><section class="main"><div class="top"><b style="color:var(--navy)" id="ttl"></b><span class="sp"></span><span id="conn"></span></div><div class="page" id="page"></div></section></div>`;
   $('#teacherLock').onclick=async()=>{await api('auth.logout');location.reload();};
-  window.bgs.on(async () => { const was = T.st; T.st = await api('t.state'); configureAcademics(T.st.academic?.subjects,T.st.academic?.grades);paintConn(); if (T.page === 'students' || (T.page === 'reports' && rv)) { if (!$('#modal') && T.page === 'reports') rv.refresh(); else if (T.page === 'students') draw(); } });
+  window.bgs.on(async () => { const was = T.st; T.st = await api('t.state'); configureAcademics(T.st.academic?.subjects,T.st.academic?.grades);paintConn(); if (T.page === 'conn' && PG.paintConnPage) PG.paintConnPage(); if (T.page === 'students' || (T.page === 'reports' && rv)) { if (!$('#modal') && T.page === 'reports') rv.refresh(); else if (T.page === 'students') draw(); } });
   draw();
 }
 function paintConn() {
   const c = T.st.conn, el = $('#conn'); if (!el) return;
-  el.innerHTML = c.state === 'online' ? `<span class="syncdot c-green">Connected to Headteacher PC${c.pending ? ` · sending ${c.pending}` : ' · all marks delivered'}</span>` : `<span class="syncdot c-red" title="${esc(c.error)}">Not connected${c.pending ? ` · ${c.pending} mark(s) saved here, waiting to send` : ''}</span>`;
-  $('#who').textContent = T.st.cfg.teacher ? '👤 ' + T.st.cfg.teacher : '';
+  el.innerHTML = c.state === 'online' ? `<span class="syncdot c-green">Connected to Headteacher PC${c.pending ? ` · sending ${c.pending}` : ' · all marks delivered'}</span>` : `<span class="syncdot c-red" title="${esc(c.error)}">${c.searching ? 'Searching for Headteacher PC…' : 'Not connected'}${c.pending ? ` · ${c.pending} mark(s) saved here, waiting to send` : ''}</span>`;
+  $('#who').textContent = T.st.cfg.teacher ? T.st.cfg.teacher : '';
 }
 function draw() {
-  $('#nav').innerHTML = NAV.map(n => `<button data-p="${n[0]}" class="${T.page === n[0] ? 'on' : ''}">${tabIcon(n[0])}${n[2]}</button>`).join('');
+  $('#nav').innerHTML = NAV.map(n => `<button data-p="${n[0]}" class="${T.page === n[0] ? 'on' : ''}">${tabIcon(n[0])}${n[1]}</button>`).join('');
   $$('#nav button').forEach(b => b.onclick = () => { T.page = b.dataset.p; rv = null; draw(); });
-  $('#ttl').textContent = NAV.find(n => n[0] === T.page)[2]; paintConn(); PG[T.page]();
+  $('#ttl').textContent = NAV.find(n => n[0] === T.page)[1]; paintConn(); PG[T.page]();
 }
 const page = h => { $('#page').innerHTML = h; };
 const yearsList = () => { const a = []; for (let y = T.st.current.year + 1; y >= 2026; y--) a.push(y); return a; };
@@ -41,7 +41,7 @@ const PG = {
       <div><label>Subject</label><select id="s">${subs.map(s => `<option ${s === T.subject ? 'selected' : ''}>${esc(s)}</option>`).join('')}</select></div></div></div>
     <div class="banner info">Type each mark (0–100) and press <b>Enter</b> to go to the next student. Every mark is saved on this PC immediately and sent to the Headteacher's PC automatically. Tick <b>Absent</b> if the child missed the paper.</div>
     <div class="pagehead"><h3>${esc(T.cls)} · ${esc(T.subject)} · ${EXAMS.find(e => e.id === T.exam).short} Term ${T.term} ${T.year}</h3><span class="sp"></span><span id="prog" class="chip c-blue"></span></div>
-    ${roster.length ? `<table class="t"><thead><tr><th>#</th><th>Student</th><th>Admission No.</th><th style="width:120px">Mark / 100</th><th>Absent</th><th>Grade</th><th></th></tr></thead><tbody>${roster.map((s, i) => { const m = map.get(markKey(T.year, T.term, T.exam, s.id, T.subject)), has = m && !m.cleared; return `<tr data-sid="${esc(s.id)}"><td>${i + 1}</td><td><b>${esc(s.last)}</b> ${esc(s.first)}</td><td>${esc(s.id)}</td><td><input class="markin" inputmode="numeric" value="${has && !m.absent ? m.score : ''}" ${has && m.absent ? 'disabled' : ''}></td><td><input type="checkbox" class="abs" ${has && m.absent ? 'checked' : ''}></td><td class="gr">${has && !m.absent ? gradeChip(m.score) : ''}</td><td class="sv muted">${has ? '✓ saved' : ''}</td></tr>`; }).join('')}</tbody></table>` : '<div class="empty">No students in this class yet. Make sure this PC is connected to the Headteacher PC (Connection).</div>'}`);
+    ${roster.length ? `<table class="t"><thead><tr><th>#</th><th>Student</th><th>Admission No.</th><th style="width:120px">Mark / 100</th><th>Absent</th><th>Grade</th><th></th></tr></thead><tbody>${roster.map((s, i) => { const m = map.get(markKey(T.year, T.term, T.exam, s.id, T.subject)), has = m && !m.cleared; return `<tr data-sid="${esc(s.id)}"><td>${i + 1}</td><td><b>${esc(s.last)}</b> ${esc(s.first)}</td><td>${esc(s.id)}</td><td><input class="markin" inputmode="numeric" value="${has && !m.absent ? m.score : ''}" ${has && m.absent ? 'disabled' : ''}></td><td><input type="checkbox" class="abs" ${has && m.absent ? 'checked' : ''}></td><td class="gr">${has && !m.absent ? gradeChip(m.score) : ''}</td><td class="sv muted">${has ? '✓ saved' : ''}</td></tr>`; }).join('')}</tbody></table>` : `<div class="empty">${st.conn.state === 'online' ? 'No students in this class yet.' : 'No students to show yet. Open the Connection page and make sure this PC is connected to the Headteacher PC.'}</div>`}`);
     const prog = () => { $('#prog').textContent = `${done()} of ${roster.length} entered`; }; prog();
     for (const [id, k] of [['y', 'year'], ['t', 'term'], ['e', 'exam'], ['c', 'cls'], ['s', 'subject']]) $('#' + id).onchange = e => { T[k] = ['year', 'term'].includes(k) ? +e.target.value : e.target.value; PG.marks(); };
     const inputs = $$('.markin');
@@ -77,16 +77,33 @@ const PG = {
     $$('[data-prom]').forEach(e=>e.onchange=async()=>{if(!e.value)return;try{const r=await api('t.setPromotion',{studentId:e.dataset.prom,year:yr,term:3,decision:e.value});T.st.promotions=(T.st.promotions||[]).filter(p=>p.key!==r.key).concat(r);$(`[data-status="${e.dataset.prom}"]`).textContent='Saved · syncing';}catch(err){toast(err.message,true);}});
   },
   conn() {
-    const c = T.st.cfg;
-    page(`<div class="card" style="max-width:640px"><h3>Connection to the Headteacher's PC</h3><p class="muted">Pair once using the address and school key. These details stay saved on this computer. Whenever the Ethernet cable is connected and the Headteacher server is running, synchronization reconnects automatically. You do not need a new key each day.</p>
+    const c = T.st.cfg, paired = !!(c.key && c.teacher);
+    page(`<div class="card conn-card"><h3>Connect to the Headteacher's PC</h3>
+    <p class="muted">${paired ? 'This computer is paired. It finds the Headteacher PC automatically every time, so you will not need a new key.' : 'Set this up once. Join the two computers with the Ethernet cable, open the program on both, and enter the school key shown on the Headteacher PC under Settings &amp; Backup.'}</p>
+    <div id="cstat"></div>
     <div class="field"><label>Your name (shown on the marks you enter)</label><input id="tn" value="${esc(c.teacher)}" placeholder="e.g. Mr. Okello (Director of Studies)"></div>
-    <div class="field"><label>Headteacher PC address</label><input id="ha" value="${esc(c.hm)}" placeholder="e.g. 192.168.1.10:4750"></div>
-    <div class="field"><label>School key</label><input id="hk" value="${esc(c.key)}" placeholder="XXXX-XXXX" style="text-transform:uppercase;letter-spacing:.1em"></div>
-    <div class="bar"><button class="pri" id="sv">Save & connect</button><span id="cs"></span></div>
+    <div class="field"><label>School key</label><input id="hk" value="${esc(c.key)}" placeholder="XXXX-XXXX" autocomplete="off" spellcheck="false" style="text-transform:uppercase;letter-spacing:.12em"></div>
+    <details><summary>Advanced: enter the Headteacher PC address manually</summary><div class="field" style="margin-top:8px"><label>Address (optional)</label><input id="ha" value="${esc(c.hm)}" placeholder="Leave empty – found automatically"></div></details>
+    <div class="bar" style="margin-top:14px"><button class="pri" id="sv">${paired ? 'Save changes' : 'Save &amp; connect'}</button><button id="fd">Find Headteacher PC again</button></div>
     <p class="muted">This PC only receives the <b>student list (name, admission number, class)</b>. It never sees fees, payments, salaries or phone numbers.</p></div>`);
-    const show = () => { const s = T.st.conn; $('#cs') && ($('#cs').innerHTML = s.state === 'online' ? '<span class="paid">✓ Connected</span>' : `<span class="owe">${esc(s.error || '')}</span>`); };
-    show();
-    $('#sv').onclick = () => run(async () => { await api('t.setConfig', { teacher: $('#tn').value, hm: $('#ha').value, key: $('#hk').value }); $('#cs').textContent = 'Connecting…'; await new Promise(r => setTimeout(r, 1500)); await api('t.syncNow'); T.st = await api('t.state'); configureAcademics(T.st.academic?.subjects,T.st.academic?.grades);paintConn(); show(); });
+    PG.paintConnPage = () => {
+      const el = $('#cstat'); if (!el) return;
+      const s = T.st.conn, k = T.st.cfg;
+      if (s.state === 'online') el.innerHTML = `<div class="banner ok"><b>Connected.</b> Headteacher PC found at ${esc(s.address || k.hm)}.</div>`;
+      else if (s.searching) el.innerHTML = '<div class="banner info"><b>Searching…</b> Looking for the Headteacher PC on the cable or network.</div>';
+      else if (k.key) el.innerHTML = `<div class="banner"><b>Not connected yet.</b> ${esc(s.error || '')}</div>`;
+      else el.innerHTML = '';
+    };
+    PG.paintConnPage();
+    const refreshState = async () => { T.st = await api('t.state'); configureAcademics(T.st.academic?.subjects, T.st.academic?.grades); paintConn(); PG.paintConnPage(); if (T.st.cfg.key) $('#hk').value = T.st.cfg.key; };
+    $('#sv').onclick = () => run(async () => {
+      if (!$('#tn').value.trim() || !$('#hk').value.trim()) throw new Error('Enter your name and the school key.');
+      await api('t.setConfig', { teacher: $('#tn').value, hm: $('#ha').value, key: $('#hk').value });
+      $('#cstat').innerHTML = '<div class="banner info"><b>Connecting…</b></div>';
+      await api('t.find'); await refreshState();
+      if (T.st.conn.state === 'online') toast('Connected. This computer is now paired.');
+    });
+    $('#fd').onclick = () => run(async () => { $('#cstat').innerHTML = '<div class="banner info"><b>Searching…</b></div>'; const r = await api('t.find'); await refreshState(); if (!r.found && T.st.conn.state !== 'online') toast(r.note || 'Headteacher PC not found yet. Check the cable and that the program is open on that computer.', true); });
   },
 };
 const gradeChip = s => { const g = gradeOf(s); return g ? `<span class="chip g-${g.g}">${g.g}</span>` : ''; };

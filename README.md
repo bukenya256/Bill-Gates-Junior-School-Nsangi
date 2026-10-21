@@ -6,11 +6,13 @@
 
 ## First start (once per PC)
 1. **Headteacher's PC** → choose "Headteacher's PC", create the password.
-2. **Teachers' PC** → choose "Teachers' PC".
-3. HM: Settings & Backup shows the **address** (e.g. `192.168.1.10:4750`) and the **school key**.
-4. Teachers' PC: Connection page → type your name, the address and the key → Save & connect.
-   Both PCs must be on the same WiFi/cable. When Windows shows a firewall question on the HM PC, tick *Private networks* → Allow.
-   (Windows may also show "Windows protected your PC" for an unsigned program: More info → Run anyway.)
+2. **Teachers' PC** → choose "Teachers' PC", create a password for that PC.
+3. Join the two computers with an Ethernet cable and open the program on both. (First time on a bare cable, Windows takes up to a minute to give both computers an address.)
+4. Headteacher's PC: Settings & Backup shows the **school key**.
+5. Teachers' PC: Connection page → type your name and the school key → Save & connect. The Headteacher PC is found automatically.
+6. If the Teachers' PC cannot find it, on the Headteacher's PC press **Allow connections in Windows (one time)** in Settings & Backup and click Yes.
+
+**This is done once.** The key and the pairing stay saved on the Teachers' PC. On every later day just plug in the cable, open the program on both computers and the connection returns by itself – even if Windows gives the computers new addresses. A new key is only needed if the Headteacher presses "Make a new key" or replaces her computer.
 
 ## How it behaves
 | Need | What the system does |
@@ -35,6 +37,9 @@ Note: the cloud holds a complete, readable copy of every record (students, fees,
 - Only one HM PC is the master. Class promotion at year end is done manually (Students → Edit → Class), and fees follow the new class automatically.
 - Teacher-entered marks are accepted for any term/year (no term locking).
 
+
+## New in 1.5.0
+See `UPDATE_V1.5.md`: automatic discovery of the Headteacher PC, one-time pairing, cleaner screens.
 
 ## New in 1.1.0
 See `CHANGES_2026_RECOVERY_AND_PROMOTIONS.md` for cloud restoration, class rosters, discipline records, year-end promotions and print updates.

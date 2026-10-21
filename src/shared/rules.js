@@ -10,7 +10,7 @@ const SUBJECTS_UPPER = ['Mathematics', 'Science', 'English', 'Social Studies'];
 const DEFAULT_SUBJECTS = Object.fromEntries(CLASSES.map(c => [c, [...(NURSERY.includes(c) ? SUBJECTS_NURSERY : LOWER.includes(c) ? SUBJECTS_LOWER : SUBJECTS_UPPER)]]));
 let configuredSubjects = null;
 const subjectsFor = c => (configuredSubjects && Array.isArray(configuredSubjects[c]) ? configuredSubjects[c] : DEFAULT_SUBJECTS[c] || []).slice();
-const configureAcademics = (subjects, grades) => { configuredSubjects = subjects || null; if (Array.isArray(grades) && grades.length) GRADES.splice(0, GRADES.length, ...grades.map(g => ({min:Number(g.min),g:String(g.g),label:String(g.label)}))); else GRADES.splice(0,GRADES.length,...DEFAULT_GRADES); }; 
+const configureAcademics = (subjects, grades) => { configuredSubjects = subjects || null; if (Array.isArray(grades) && grades.length) GRADES.splice(0, GRADES.length, ...grades.map(g => ({min:Number(g.min),g:String(g.g),label:String(g.label)}))); else GRADES.splice(0,GRADES.length,...DEFAULT_GRADES); };
 const EXAMS = [
   { id: 'BOT', name: 'Beginning of Term', short: 'BOT' },
   { id: 'MID', name: 'Mid Term Exams', short: 'MID' },
@@ -24,7 +24,6 @@ const GRADES = [
 const DEFAULT_GRADES = GRADES.map(g => ({...g}));
 const gradeOf = m => (m == null ? null : GRADES.find(x => m >= x.min));
 
-
 const ADMISSION_FEE = 30000;
 const FEE_TABLE = { nursery: 200000, lower: 250000, upper: 300000, boarding: 500000 };
 function feeFor(className, type) {
@@ -34,11 +33,9 @@ function feeFor(className, type) {
   return FEE_TABLE.upper;
 }
 
-
 const num = n => String(Math.round(Number(n) || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 const money = n => 'UGX ' + num(n);
 const parseMoney = s => Number(String(s == null ? '' : s).replace(/[^\d]/g, '')) || 0;
-
 
 function termsFor(y) {
   return [
@@ -57,7 +54,6 @@ function detectTerm(today) {
 }
 const termIdx = (y, t) => Number(y) * 3 + Number(t);
 const prettyDate = iso => new Date(iso + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-
 
 const markKey = (y, t, e, sid, sub) => `${y}|${t}|${e}|${sid}|${sub}`;
 function rosterFor(students, marks, year, cls, currentYear) {

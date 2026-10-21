@@ -5,7 +5,7 @@ const [,, dataDir=fs.mkdtempSync(path.join(os.tmpdir(),'bgsdev-')), port=5001, l
 const clients=new Set();
 const core=createApp({dataDir,backupDir:path.join(dataDir,'bk'),port:+lan,notify:k=>clients.forEach(r=>r.write(`data: ${k}\n\n`))});
 const BRIDGE=`window.bgs={call:async(a,g)=>{const r=await (await fetch('/rpc',{method:'POST',body:JSON.stringify({a,g})})).json();if(!r.ok)throw new Error(r.error);return r.data},on:cb=>{const e=new EventSource('/events');e.onmessage=m=>cb(m.data)}};`;
-const types={'.html':'text/html','.js':'text/javascript','.css':'text/css'};
+const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.svg':'image/svg+xml','.png':'image/png','.jpeg':'image/jpeg','.webp':'image/webp'};
 http.createServer((q,s)=>{
  if(q.url==='/bridge.js'){s.setHeader('content-type','text/javascript');return s.end(BRIDGE)}
  if(q.url==='/events'){s.writeHead(200,{'content-type':'text/event-stream'});clients.add(s);return q.on('close',()=>clients.delete(s))}

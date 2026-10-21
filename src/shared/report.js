@@ -63,7 +63,6 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': 
 const ordinal = n => { const s = ['th', 'st', 'nd', 'rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); };
 const fmt1 = n => (n == null ? '—' : (Math.round(n * 10) / 10).toString());
 
-// Default remarks, based on the average. Teachers can overwrite them on the preview screen.
 function defaultRemarks(avg) {
   if (avg == null) return { teacher: '', head: '' };
   if (avg >= 80) return { teacher: 'Outstanding performance. Keep up the excellent work.', head: 'Excellent results. Congratulations and keep it up.' };
@@ -74,14 +73,12 @@ function defaultRemarks(avg) {
   return { teacher: 'Weak performance. Urgent improvement is needed with help at home and at school.', head: 'Poor results. Please meet the class teacher to agree a plan for improvement.' };
 }
 
-// A typed remark prints as text; if it was left empty, ruled lines are printed so it can be written by hand.
 const remarkBody = t => (t && t.trim() ? `<p>${esc(t)}</p>` : '<div class="rc-lines"><i></i><i></i></div>');
 const gradeKey = () => GRADES.map((g, i) => `<span><b>${g.g}</b> ${i === 0 ? g.min + '–100' : g.min + '–' + (GRADES[i - 1].min - 1)} ${g.label}</span>`).join('');
 
 function schoolHead(cls) {
   return `<div class="${cls}"><div class="rc-crest">${CREST_SVG}</div><div class="rc-school"><h1>${esc(SCHOOL.name.toUpperCase())}</h1><p>Excellence in Learning</p></div></div>`;
 }
-
 
 function reportCardHTML(res, ctx, comments) {
   const st = res.st, g = gradeOf(res.avg), cm = comments || defaultRemarks(res.avg);
@@ -110,7 +107,6 @@ function reportCardHTML(res, ctx, comments) {
   </section>`;
 }
 
-
 function classSheetHTML(results, ctx) {
   const subs = ctx.subjects, n = results.length;
   const col = s => results.map(r => r.rows.find(x => x.subject === s).score).filter(v => v != null);
@@ -133,7 +129,7 @@ function classSheetHTML(results, ctx) {
 function buildPrintHTML(body, orientation, title) {
   return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title><style>@page{size:A4 ${orientation};margin:${orientation === 'portrait' ? '10mm' : '9mm'}}body{margin:0;background:#fff}${REPORT_CSS}</style></head><body>${body}</body></html>`;
 }
-// Prints through a hidden frame so no pop-up window is needed (works in the desktop app too).
+
 function printHTML(body, orientation, title) {
   const f = document.createElement('iframe');
   f.setAttribute('aria-hidden', 'true'); f.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden';

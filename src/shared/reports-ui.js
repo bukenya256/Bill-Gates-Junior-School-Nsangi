@@ -22,8 +22,8 @@ function ReportsView(root, P) {
       <div><label>Examination</label><select id="re">${EXAMS.map(e => `<option value="${e.id}" ${e.id === S.exam ? 'selected' : ''}>${e.name}</option>`).join('')}</select></div>
       <div><label>Class</label><select id="rc">${CLASSES.map(c => `<option ${c === S.cls ? 'selected' : ''}>${c}</option>`).join('')}</select></div>
       <span style="flex:1"></span>
-      <button id="pall" ${rs.length ? '' : 'disabled'}>🖨 Print all report cards (${rs.length})</button>
-      <button class="pri" id="psheet" ${rs.length ? '' : 'disabled'}>🖨 Print whole-class results</button></div></div>
+      <button id="pall" ${rs.length ? '' : 'disabled'}>Print all report cards (${rs.length})</button>
+      <button class="pri" id="psheet" ${rs.length ? '' : 'disabled'}>Print whole-class results</button></div></div>
     ${rs.length ? `${miss.length ? `<div class="banner"><b>Some marks are still missing</b> (${entered} of ${total} entered): ${miss.map(([s, k]) => `${esc(s)} – ${k} student${k > 1 ? 's' : ''}`).join(', ')}. Missing marks print as “—” and positions may change.</div>` : `<div class="banner info">All ${total} marks for ${esc(S.cls)} are in.</div>`}
     <table class="t"><thead><tr><th>#</th><th>Student</th>${subs.map(s => `<th class="n">${esc(s.replace('Physical Exercise (PE)', 'PE'))}</th>`).join('')}<th class="n">Total</th><th class="n">Avg</th><th>Grade</th><th class="n">Pos</th><th></th></tr></thead><tbody>
     ${rs.map((r, i) => `<tr><td>${i + 1}</td><td><b>${esc(r.st.last)}</b> ${esc(r.st.first)}<span class="sub">${esc(r.st.id)}</span></td>${r.rows.map(x => `<td class="n">${x.absent ? '<span class="muted">ABS</span>' : x.score == null ? '<span class="muted">—</span>' : fmt1(x.score)}</td>`).join('')}<td class="n"><b>${r.sat ? fmt1(r.total) : '—'}</b></td><td class="n">${r.avg == null ? '—' : fmt1(r.avg) + '%'}</td><td>${r.avg == null ? '' : `<span class="chip g-${gradeOf(r.avg).g}">${gradeOf(r.avg).g}</span>`}</td><td class="n"><b>${r.pos ? ordinal(r.pos) : '—'}</b></td><td class="act"><button class="sm" data-pv="${i}">Preview / print</button></td></tr>`).join('')}</tbody></table>`
@@ -43,7 +43,7 @@ function ReportsView(root, P) {
     const m = modal(`Report card – ${esc(r.st.first + ' ' + r.st.last)}`, `<style>${REPORT_CSS}.rc-page{width:100%;min-height:0;transform-origin:top left}</style>
       <div style="max-height:52vh;overflow:auto;border:1px solid var(--line);border-radius:8px;margin-bottom:12px">${reportCardHTML(r, ctx(), c)}</div>
       <div class="grid2"><div class="field"><label>Class teacher's remark</label><textarea id="ct" rows="3">${esc(c.teacher)}</textarea></div><div class="field"><label>Head teacher's remark</label><textarea id="ch" rows="3">${esc(c.head)}</textarea></div></div>
-      <div class="mf" style="padding:0"><button data-pp ${i ? '' : 'disabled'}>← Previous</button><button data-nn ${i < S.results.length - 1 ? '' : 'disabled'}>Next →</button><span style="flex:1"></span><button data-sv>Save remarks</button><button class="pri" data-pr>🖨 Print this report</button></div>`, { wide: true });
+      <div class="mf" style="padding:0"><button data-pp ${i ? '' : 'disabled'}>← Previous</button><button data-nn ${i < S.results.length - 1 ? '' : 'disabled'}>Next →</button><span style="flex:1"></span><button data-sv>Save remarks</button><button class="pri" data-pr>Print this report</button></div>`, { wide: true });
     const save = async () => { await run(async () => { await P.saveRemark(cmtId(r.st.id), $('#ct', m).value, $('#ch', m).value); await load(); }); };
     $('[data-sv]', m).onclick = async () => { await save(); toast('Remarks saved'); preview(i); };
     $('[data-pr]', m).onclick = () => { const cc = { teacher: $('#ct', m).value, head: $('#ch', m).value }; P.saveRemark(cmtId(r.st.id), cc.teacher, cc.head); printHTML(reportCardHTML(r, ctx(), cc), 'portrait', 'Report ' + r.st.id); };

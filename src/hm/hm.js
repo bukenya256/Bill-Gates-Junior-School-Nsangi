@@ -1,18 +1,17 @@
 const tabIcon = k => `<img class="tab-icon" src="${({"dashboard":"../assets/dashboard.png","applications":"../assets/applications.png","students":"../assets/students.png","classes":"../assets/classes.jpeg","discipline":"../assets/discipline.png","fees":"../assets/fees.png","staff":"../assets/staff.svg","receipts":"../assets/receipts.png","reports":"../assets/reports.png","settings":"../assets/settings.png","logout":"../assets/logout.png","login":"../assets/login.png","school":"../assets/bgs-icon.png","subjects":"../assets/subjects.webp","grading":"../assets/grading.png","notifications":"../assets/notifications.png"})[k] || "../assets/school.png"}" alt="">`;
 'use strict';
 const S = { page: 'dashboard', year: null, term: null, period: null, d: null, sync: null, f: { q: '', cls: '', st: 'active', ty: '', fee: '', rcpt: 'all', adm: 'pending', from: '', to: '' } };
-const NAV = [['dashboard', '🏠', 'Dashboard'], ['g1', 'School'], ['applications', '📝', 'Applications'], ['students', '🎓', 'Students'], ['classes', '🏫', 'Classes'], ['discipline', '⚖️', 'Discipline'], ['fees', '💰', 'School Fees'], ['staff', '👩‍🏫', 'Staff & Salaries'], ['receipts', '🧾', 'Receipts'], ['g2', 'Academics'], ['reports', '📊', 'Academic Reports'], ['subjects', '📚', 'Subjects'], ['grading', '🎓', 'Grading Scale'], ['g3', 'System'], ['notifications', '✉️', 'Notifications'], ['settings', '⚙️', 'Settings & Backup']];
+const NAV = [['dashboard', 'Dashboard'], ['#', 'School'], ['applications', 'Applications'], ['students', 'Students'], ['classes', 'Classes'], ['discipline', 'Discipline'], ['fees', 'School Fees'], ['staff', 'Staff & Salaries'], ['receipts', 'Receipts'], ['#', 'Academics'], ['reports', 'Academic Reports'], ['subjects', 'Subjects'], ['grading', 'Grading Scale'], ['#', 'System'], ['notifications', 'Notifications'], ['settings', 'Settings & Backup']];
 let reportsView = null;
 const root = $('#root');
 const termTxt = (y, t) => `Term ${t} ${y}`;
 const readOnlyViewNote = () => (S.d && (S.year !== S.d.current.year || S.term !== S.d.current.term)) ? `<div class="banner">You are viewing <b>${termTxt(S.year, S.term)}</b> – not the current term (${termTxt(S.d.current.year, S.d.current.term)}). Payments recorded here are saved against ${termTxt(S.year, S.term)}.</div>` : '';
 
-
 async function boot() {
   const a = await api('auth.status');
   if (a.authed) return enter();
   root.innerHTML = `<div class="center-body"><form class="login" id="lf"><div class="logo"><img src="../assets/bgs-icon.png" alt="" class="login-icon"></div><h2>Bill Gates Junior School</h2><p class="muted">${a.hasPassword ? 'Headteacher login' : 'First time: create the Headteacher password'}</p>
-  <input type="password" id="pw" placeholder="${a.hasPassword ? 'Password' : 'Choose a password (min 4 characters)'}" autofocus>${a.hasPassword ? '' : '<input type="password" id="pw2" placeholder="Repeat password">'}
+  <input type="password" id="pw" placeholder="${a.hasPassword ? 'Password' : 'Choose a password (min 6 characters)'}" autofocus>${a.hasPassword ? '' : '<input type="password" id="pw2" placeholder="Repeat password">'}
   <button class="pri" type="submit">${a.hasPassword ? 'Log in' : 'Create password & start'}</button><p class="err" id="le"></p></form></div>`;
   $('#lf').onsubmit = async e => {
     e.preventDefault(); const pw = $('#pw').value;
@@ -27,7 +26,7 @@ async function enter() {
     <section class="main"><div class="top"><b style="color:var(--navy)">Academic year</b><select id="selY"></select><select id="selT"></select><span id="curtag"></span><span class="sp"></span><span id="syncchip"></span></div><div class="page" id="page"></div></section></div>`;
   $('#lock').onclick = async () => { await api('auth.logout'); location.reload(); };
   $('#selY').onchange = e => { S.year = +e.target.value; refresh(); }; $('#selT').onchange = e => { S.term = +e.target.value; refresh(); };
-  window.bgs.on(async k => { if (k === 'sync') { await loadSync(); } else if (k === 'changed') { if (!$('#modal') && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) refresh(); else if (S.page === 'reports') {} } });
+  window.bgs.on(async k => { if (k === 'sync') { await loadSync(); } else if (k === 'changed') { if (!$('#modal') && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) refresh(); } });
   reportsView = null; await refresh(); loadSync();
 }
 async function loadSync() { try { S.sync = (await api('settings.get')).cloud.status; } catch (e) { return; } paintSync(); }
@@ -45,7 +44,7 @@ async function refresh() {
   $('#selT').innerHTML = [1, 2, 3].map(t => `<option value="${t}" ${t === S.term ? 'selected' : ''}>Term ${t}</option>`).join('');
   $('#curtag').innerHTML = (S.year === S.d.current.year && S.term === S.d.current.term) ? chip('CURRENT TERM', 'green') : `<button class="sm" id="viewcur">Back to current term (${termTxt(S.d.current.year, S.d.current.term)})</button>`;
   const vc = $('#viewcur'); if (vc) vc.onclick = () => { S.year = S.d.current.year; S.term = S.d.current.term; refresh(); };
-  $('#nav').innerHTML = NAV.map(n => n.length === 2 ? `<div class="grp">${n[1]}</div>` : `<button data-p="${n[0]}" class="${S.page === n[0] ? 'on' : ''}">${tabIcon(n[0])}${n[2]}${n[0] === 'applications' && pendingCount() ? ` <span class="chip c-amber" style="margin-left:auto">${pendingCount()}</span>` : ''}</button>`).join('');
+  $('#nav').innerHTML = NAV.map(n => n[0] === '#' ? `<div class="grp">${n[1]}</div>` : `<button data-p="${n[0]}" class="${S.page === n[0] ? 'on' : ''}">${tabIcon(n[0])}${n[1]}${n[0] === 'applications' && pendingCount() ? ` <span class="chip c-amber" style="margin-left:auto">${pendingCount()}</span>` : ''}</button>`).join('');
   $$('#nav button').forEach(b => b.onclick = () => { S.page = b.dataset.p; reportsView = null; refresh(); });
   paintSync(); await PAGES[S.page]();
 }
@@ -61,7 +60,7 @@ const clsOpts = sel => `<option value="">All classes</option>` + CLASSES.map(c =
 const methodSel = () => `<div class="field"><label>Payment method</label><select id="fm"><option>Cash</option><option>Mobile Money</option><option>Bank</option></select></div>`;
 
 const PAGES = {
-  
+
   dashboard() {
     const d = S.d, act = d.students.filter(s => s.status === 'active'), withBill = d.students.filter(s => s.fee.has);
     const due = withBill.reduce((a, s) => a + s.fee.due, 0), paid = withBill.reduce((a, s) => a + s.fee.paid, 0);
@@ -75,7 +74,6 @@ const PAGES = {
     <div class="card"><h3 style="margin-bottom:10px">Latest receipts</h3>${recent.length ? `<table class="t"><tbody>${recent.map(p => `<tr><td class="nowrap">${fmtDT(p.ts)}</td><td>${esc(p.receiptNo)}</td><td>${esc(p.studentName || p.staffName)}</td><td>${kindChip(p.kind)}</td><td class="n"><b>${money(p.amount)}</b></td></tr>`).join('')}</tbody></table>` : '<div class="empty">No payments recorded yet.</div>'}</div>`);
   },
 
-  
   applications() {
     const draw = () => {
       const all = S.d.students.filter(s => (S.f.adm === 'pending' ? s.status === 'pending' : s.admission.paid > 0 && s.status !== 'pending') && hit(s, S.f.q));
@@ -85,13 +83,12 @@ const PAGES = {
         : `<div class="empty">${S.f.adm === 'pending' ? 'No pending applications. Use “New application” when a parent comes.' : 'Nothing to show.'}</div>`;
       $$('[data-pay]').forEach(b => b.onclick = () => admissionPay(b.dataset.pay));
     };
-    page(`${head('Applications & Admission Fee (UGX 30,000)', '<button class="pri" id="newapp">＋ New application</button>')}
+    page(`${head('Applications & Admission Fee (UGX 30,000)', '<button class="pri" id="newapp">+ New application</button>')}
     <div class="bar"><div class="seg"><button data-a="pending" class="${S.f.adm === 'pending' ? 'on' : ''}">Pending (${pendingCount()})</button><button data-a="paid" class="${S.f.adm === 'paid' ? 'on' : ''}">Admitted (fee paid)</button></div><input type="search" id="q" placeholder="Search name, number, parent…" value="${esc(S.f.q)}"></div><div id="tbl"></div>`);
     $$('[data-a]').forEach(b => b.onclick = () => { S.f.adm = b.dataset.a; PAGES.applications(); });
     bindSearch('q', 'q', draw); $('#newapp').onclick = newApplication; draw();
   },
 
-  
   students() {
     const draw = () => {
       const f = S.f, list = S.d.students.filter(s => hit(s, f.q) && (!f.cls || s.className === f.cls) && (!f.ty || s.type === f.ty) && (f.st === 'all' || s.status === f.st));
@@ -119,7 +116,7 @@ const PAGES = {
   discipline() {
     const sList = S.d.students.filter(s=>s.status !== 'pending');
     const rows = S.d.discipline || [];
-    page(`${head('Disciplinary Records','<button class="pri" id="newdiscipline">＋ Record case</button>')}<div class="banner info">Record suspension or expulsion with a reason. Records are retained permanently; expulsion makes a student inactive without deleting admission or payment history.</div><div class="card">${rows.length ? `<table class="t"><thead><tr><th>Date</th><th>Student</th><th>Class</th><th>Decision</th><th>Reason</th><th>Return date</th><th>Status</th><th>Actions</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${esc(r.date)}</td><td>${esc(r.studentName)}<span class="sub">${esc(r.studentId)}</span></td><td>${esc(r.className)}</td><td>${chip(r.action.toUpperCase(),r.action === 'expulsion'?'red':'amber')}</td><td>${esc(r.reason)}</td><td>${esc(r.end || '—')}</td><td>${chip(r.cancelledAt ? 'REVERSED' : 'ACTIVE',r.cancelledAt ? 'grey' : 'amber')}</td><td><button class="sm" data-letter="${esc(r.id)}">Print notice</button>${r.cancelledAt ? '' : `<button class="sm danger" data-reverse="${esc(r.id)}">Cancel ${esc(r.action)}</button>`}</td></tr>`).join('')}</tbody></table>`:'<div class="empty">No disciplinary cases recorded.</div>'}</div>`);
+    page(`${head('Disciplinary Records','<button class="pri" id="newdiscipline">+ Record case</button>')}<div class="banner info">Record suspension or expulsion with a reason. Records are retained permanently; expulsion makes a student inactive without deleting admission or payment history.</div><div class="card">${rows.length ? `<table class="t"><thead><tr><th>Date</th><th>Student</th><th>Class</th><th>Decision</th><th>Reason</th><th>Return date</th><th>Status</th><th>Actions</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${esc(r.date)}</td><td>${esc(r.studentName)}<span class="sub">${esc(r.studentId)}</span></td><td>${esc(r.className)}</td><td>${chip(r.action.toUpperCase(),r.action === 'expulsion'?'red':'amber')}</td><td>${esc(r.reason)}</td><td>${esc(r.end || '—')}</td><td>${chip(r.cancelledAt ? 'REVERSED' : 'ACTIVE',r.cancelledAt ? 'grey' : 'amber')}</td><td><button class="sm" data-letter="${esc(r.id)}">Print notice</button>${r.cancelledAt ? '' : `<button class="sm danger" data-reverse="${esc(r.id)}">Cancel ${esc(r.action)}</button>`}</td></tr>`).join('')}</tbody></table>`:'<div class="empty">No disciplinary cases recorded.</div>'}</div>`);
     $$('[data-letter]').forEach(b=>b.onclick=()=>{
       const r=rows.find(x=>x.id===b.dataset.letter);if(!r)return;
       const body=`<main style="font:15px/1.8 Georgia,serif;max-width:175mm;margin:12mm auto;color:#15263e"><header style="text-align:center;border-bottom:3px double #172c50;padding-bottom:12px"><h2 style="margin:0">BILL GATES JUNIOR SCHOOL NSANGI</h2><small>OFFICIAL DISCIPLINARY NOTICE</small></header><p>Date: ${esc(r.date)}</p><p>To: Parent / Guardian of <b>${esc(r.studentName)}</b><br>Admission No.: ${esc(r.studentId)}<br>Class: ${esc(r.className)}</p><h3>RE: NOTICE OF ${esc(r.action.toUpperCase())}</h3><p>Dear Parent / Guardian,</p><p>This letter formally notifies you that ${esc(r.studentName)} has been ${r.action === 'suspension' ? 'suspended' : 'expelled'} from Bill Gates Junior School Nsangi.</p><p><b>Reason:</b> ${esc(r.reason)}</p><p><b>Effective date:</b> ${esc(r.date)}${r.end?`<br><b>Return date:</b> ${esc(r.end)}`:''}</p><p>Please contact the school administration for further guidance.</p><p style="margin-top:35px">Yours faithfully,<br>________________________<br>School Administration</p></main>`;
@@ -135,7 +132,7 @@ const PAGES = {
       $('#disciplineForm').onsubmit=e=>{e.preventDefault();run(async()=>{const f=Object.fromEntries(new FormData(e.target));if(!f.studentId)throw new Error('Search and select a student first.');if(f.action==='expulsion'&&!confirm('Expel this student and mark them inactive?'))return;await api('hm.addDiscipline',f);closeModal();toast('Disciplinary case saved');refresh();});};
     };
   },
-  
+
   fees() {
     const draw = () => {
       const f = S.f, list = S.d.students.filter(s => s.fee.has && hit(s, f.q) && (!f.cls || s.className === f.cls) && (!f.fee || s.fee.status === f.fee));
@@ -152,7 +149,6 @@ const PAGES = {
     bindSearch('q', 'q', draw); $('#fc').onchange = e => { f.cls = e.target.value; draw(); }; $('#ff').onchange = e => { f.fee = e.target.value; draw(); }; draw();
   },
 
-  
   staff() {
     const draw = () => {
       const f = S.f, list = S.d.staff.filter(w => (f.st2 === 'all' || w.status === (f.st2 || 'active')) && (!f.q || (w.first + ' ' + w.last + ' ' + w.title).toLowerCase().includes(f.q.toLowerCase())));
@@ -166,13 +162,12 @@ const PAGES = {
       $$('[data-ss]').forEach(b => b.onclick = () => run(async () => { const [id, st] = b.dataset.ss.split('|'); if (!confirm(`Make this worker ${st}? Their records are kept either way.`)) return; await api('hm.setStaffStatus', { id, status: st }); toast('Worker is now ' + st); refresh(); }));
     };
     const f = S.f;
-    page(`${head('Staff & Salaries', '<button class="pri" id="addw">＋ Add worker</button>')}<div class="bar"><div><label>Salary month</label><input type="month" id="pm" value="${S.period}"></div><input type="search" id="q" placeholder="Search worker…" value="${esc(f.q)}" style="margin-top:18px">
+    page(`${head('Staff & Salaries', '<button class="pri" id="addw">+ Add worker</button>')}<div class="bar"><div><label>Salary month</label><input type="month" id="pm" value="${S.period}"></div><input type="search" id="q" placeholder="Search worker…" value="${esc(f.q)}" style="margin-top:18px">
     <select id="fs2" style="margin-top:18px">${[['active', 'Active workers'], ['inactive', 'Inactive workers'], ['all', 'All workers']].map(o => `<option value="${o[0]}" ${(f.st2 || 'active') === o[0] ? 'selected' : ''}>${o[1]}</option>`).join('')}</select></div>
     <div class="banner info">The salary shown in <b style="color:var(--red)">red</b> is what the school owes that worker for the month. Each payment reduces the balance and creates a receipt. Workers are never deleted — mark them inactive.</div><div id="tbl"></div>`);
     $('#pm').onchange = e => { if (e.target.value) { S.period = e.target.value; refresh(); } }; bindSearch('q', 'q', draw); $('#fs2').onchange = e => { f.st2 = e.target.value; draw(); }; $('#addw').onclick = () => staffForm(); draw();
   },
 
-  
   receipts() {
     const draw = () => {
       const f = S.f; const kinds = { all: 'All receipts', fees: 'School fees', admission: 'Admission fees', salary: "Teachers' salaries" };
@@ -180,7 +175,7 @@ const PAGES = {
       const sum = list.filter(p => !p.void).reduce((a, p) => a + p.amount, 0);
       $('#tbl').innerHTML = list.length ? `<table class="t"><thead><tr><th>Receipt No.</th><th>Date & time</th><th>Name</th><th>Purpose</th><th class="n">Amount</th><th class="n">Balance after</th><th></th></tr></thead><tbody>
       ${list.map(p => `<tr style="${p.void ? 'opacity:.55;text-decoration:line-through' : ''}"><td><b>${esc(p.receiptNo)}</b></td><td class="nowrap">${fmtDT(p.ts)}</td><td>${esc(p.studentName || p.staffName)}<span class="sub">${esc(p.studentId || p.title || '')}</span></td><td>${kindChip(p.kind)} <span class="sub">${p.kind === 'salary' ? monthName(p.period) : p.kind === 'fees' ? termTxt(p.year, p.term) : ''}</span></td>
-      <td class="n"><b>${money(p.amount)}</b></td><td class="n ${p.balance ? 'owe' : 'paid'}">${num(p.balance)}</td><td class="act">${p.void ? chip('CANCELLED', 'red') : `<button class="sm" data-rp="${esc(p.id)}">🖨 Print</button>${p.kind === 'admission' ? '' : `<button class="sm danger" data-rv="${esc(p.id)}">Cancel</button>`}`}</td></tr>`).join('')}</tbody>
+      <td class="n"><b>${money(p.amount)}</b></td><td class="n ${p.balance ? 'owe' : 'paid'}">${num(p.balance)}</td><td class="act">${p.void ? chip('CANCELLED', 'red') : `<button class="sm" data-rp="${esc(p.id)}">Print</button>${p.kind === 'admission' ? '' : `<button class="sm danger" data-rv="${esc(p.id)}">Cancel</button>`}`}</td></tr>`).join('')}</tbody>
       <tfoot><tr><td colspan="4">TOTAL (${list.filter(p => !p.void).length} receipts)</td><td class="n">${money(sum)}</td><td colspan="2"></td></tr></tfoot></table>` : '<div class="empty">No receipts.</div>';
       $$('[data-rp]').forEach(b => b.onclick = () => printReceipt(S.d.payments.find(p => p.id === b.dataset.rp)));
       $$('[data-rv]').forEach(b => b.onclick = () => voidReceipt(b.dataset.rv));
@@ -191,17 +186,15 @@ const PAGES = {
     $$('[data-k]').forEach(b => b.onclick = () => { f.rcpt = b.dataset.k; PAGES.receipts(); }); bindSearch('q', 'q', draw); $('#df').onchange = e => { f.from = e.target.value; draw(); }; $('#dt').onchange = e => { f.to = e.target.value; draw(); }; draw();
   },
 
-  
   async reports() {
     page(head('Academic Reports') + '<div id="rv"></div>');
-    reportsView = ReportsView($('#rv'), { note: '🔒 <b>Read-only.</b> Marks are entered by the Director of Studies on the Teachers\' PC and arrive here automatically. You can choose any year, term, exam and class, add your head teacher\'s remark, and print individual or whole-class reports.', getData: async y => { const r = await api('hm.marks', { year: y }); return { ...r, current: S.d.current }; }, saveRemark: (id, teacher, head) => api('hm.saveRemark', { id, teacher, head }) });
+    reportsView = ReportsView($('#rv'), { note: '<b>Read-only.</b> Marks are entered by the Director of Studies on the Teachers\' PC and arrive here automatically. You can choose any year, term, exam and class, add your head teacher\'s remark, and print individual or whole-class reports.', getData: async y => { const r = await api('hm.marks', { year: y }); return { ...r, current: S.d.current }; }, saveRemark: (id, teacher, head) => api('hm.saveRemark', { id, teacher, head }) });
     await reportsView.start({ year: S.year, term: S.term });
   },
 
-  
   subjects() {
     const configured=S.d.academic?.subjects||{};
-    page(`${head('Subjects by Class')}<div class="banner info">Manage the subjects for each class. These are shared with Teachers' PCs and printed on reports.</div><div class="card"><div class="field"><label>Select class</label><select id="subClass">${CLASSES.map(c=>`<option>${esc(c)}</option>`).join('')}</select></div><h3>Class subjects</h3><div id="subjectRows"></div><div class="bar"><button id="addSubject" type="button">＋ Add subject</button><button class="pri" id="subjectSave" type="button">Save subjects</button></div></div>`);
+    page(`${head('Subjects by Class')}<div class="banner info">Manage the subjects for each class. These are shared with Teachers' PCs and printed on reports.</div><div class="card"><div class="field"><label>Select class</label><select id="subClass">${CLASSES.map(c=>`<option>${esc(c)}</option>`).join('')}</select></div><h3>Class subjects</h3><div id="subjectRows"></div><div class="bar"><button id="addSubject" type="button">+ Add subject</button><button class="pri" id="subjectSave" type="button">Save subjects</button></div></div>`);
     let items=[];
     const collect=()=>{items=[...$$('#subjectRows input')].map(e=>e.value);};
     const draw=()=>{ $('#subjectRows').innerHTML=items.map((x,i)=>`<div class="subject-row"><span class="subject-number">${i+1}</span><input type="text" aria-label="Subject ${i+1}" placeholder="Subject name" value="${esc(x)}" data-sub="${i}" maxlength="80"><button type="button" class="sm" data-del-sub="${i}" aria-label="Remove subject ${i+1}">Remove</button></div>`).join('') || '<p class="muted">No subjects yet. Click Add subject.</p>'; $$('[data-sub]').forEach(el=>el.oninput=()=>items[+el.dataset.sub]=el.value);$$('[data-del-sub]').forEach(el=>el.onclick=()=>{collect();items.splice(+el.dataset.delSub,1);draw();}); };
@@ -230,11 +223,15 @@ const PAGES = {
     page(`${head('Settings & Backup')}
     <div class="card"><h3>Current term</h3><p class="muted">Bills for the new term are created for all active students using today's class and Day/Boarding type. Earlier balances remain as “earlier terms owed”.</p>
     <div class="bar"><select id="cy">${[c.year + 1, c.year, c.year - 1].filter(y => y >= 2026).map(y => `<option ${y === c.year ? 'selected' : ''}>${y}</option>`).join('')}</select><select id="ct">${[1, 2, 3].map(t => `<option value="${t}" ${t === c.term ? 'selected' : ''}>Term ${t}</option>`).join('')}</select><button class="pri" id="setcur">Make this the current term</button> <span class="muted">Now: ${termTxt(c.year, c.term)}</span></div></div>
-    <div class="card"><h3>Teachers' PC connection</h3><p class="muted">On the Teachers' PC choose “Teachers' PC”, then type this computer's address and the school key. Both PCs must be on the same network (WiFi or cable). If Windows asks about the firewall, tick <b>Private networks</b> and Allow.</p>
-    <p>Address: ${st.lan.ips.length ? st.lan.ips.map(i => `<code>${i}:${st.lan.port}</code>`).join(' ') : '<span class="owe">No network found – connect to WiFi / cable</span>'}</p><p>School key: <span class="keybox">${esc(st.lan.key)}</span> <button class="sm" id="newkey">Make a new key</button></p>${st.lan.error ? `<p class="err">Server problem: ${esc(st.lan.error)}</p>` : ''}</div>
+    <div class="card"><h3>Teachers' PC connection</h3><p class="muted">Pairing is done once. Join the Teachers' PC to this computer with an Ethernet cable (or the same WiFi), open the program on both, and type the school key below on the Teachers' PC. After that the Teachers' PC finds this computer by itself every time – nobody needs to be given a new code.</p>
+    <p>School key: <span class="keybox">${esc(st.lan.key)}</span> <button class="sm" id="newkey">Make a new key</button></p>
+    <p class="muted">Computer address (only if it is ever needed): ${st.lan.ips.length ? st.lan.ips.map(i => `<code>${i}:${st.lan.port}</code>`).join(' ') : '<span class="owe">No network found – plug in the cable or connect to WiFi</span>'}</p>
+    <h3 style="margin-top:14px">Teachers' PCs seen recently</h3>${st.lan.peers.length ? `<table class="t"><thead><tr><th>Name</th><th>Address</th><th>Last contact</th></tr></thead><tbody>${st.lan.peers.map(p => `<tr><td>${esc(p.name)}</td><td>${esc(p.ip)}</td><td>${fmtDT(p.at)}</td></tr>`).join('')}</tbody></table>` : '<div class="empty">No Teachers\' PC has connected since this program was opened.</div>'}
+    ${st.lan.windows ? '<div class="bar" style="margin-top:12px"><button id="fw">Allow connections in Windows (one time)</button><span class="muted">Click this once if a Teachers\' PC cannot find this computer. Windows will ask for permission.</span></div>' : ''}
+    ${st.lan.error ? `<p class="err">Connection problem: ${esc(st.lan.error)}</p>` : ''}</div>
     <div class="card"><h3>Cloud backup</h3><p class="muted">Every change (marks, payments, receipts, students, staff) is sent to your cloud database straight away. If the internet is down, changes wait safely on this PC and are sent when it returns.</p>
     <div class="grid2"><div class="field"><label>Cloud address (Supabase Project URL)</label><input id="cu" placeholder="https://xxxxxxxx.supabase.co" value="${esc(st.cloud.url)}"></div><div class="field"><label>Secret key (service_role) ${st.cloud.hasKey ? '— saved ✓ (leave empty to keep)' : ''}</label><input id="ck" type="password" placeholder="${st.cloud.hasKey ? '••••••••' : 'Paste key'}"></div></div>
-    <div class="bar"><button class="pri" id="csave">Save cloud settings</button><button id="ctest">Test connection</button><button id="cpush">Send everything now</button><button id="crestore">☁ Restore from Supabase…</button><span id="cst"></span></div>
+    <div class="bar"><button class="pri" id="csave">Save cloud settings</button><button id="ctest">Test connection</button><button id="cpush">Send everything now</button><button id="crestore">Restore from Supabase…</button><span id="cst"></span></div>
     <details><summary>How to set up the free cloud database (once, ~5 minutes)</summary><ol><li>Go to <b>supabase.com</b> → create a free account → “New project” (pick a region close to you, e.g. Europe/Frankfurt or South Africa).</li><li>Open <b>SQL Editor</b>, paste the text below, press Run.</li><li>Open <b>Project Settings → API</b>. Copy the <b>Project URL</b> and the <b>service_role</b> key into the boxes above. Keep that key private.</li></ol><pre id="sql">create table if not exists records (
   key text primary key,
   collection text not null,
@@ -246,7 +243,8 @@ alter table records enable row level security;</pre><button class="sm" id="cpsql
     <div class="card"><h3>Headteacher password</h3><div class="bar"><input type="password" id="po" placeholder="Current password"><input type="password" id="pn" placeholder="New password"><button id="pchg">Change password</button></div></div>`);
     paintCloudSt(); loadSync();
     $('#setcur').onclick = () => run(async () => { await api('hm.setCurrentTerm', { year: +$('#cy').value, term: +$('#ct').value }); S.year = +$('#cy').value; S.term = +$('#ct').value; toast('Current term changed'); refresh(); });
-    $('#newkey').onclick = () => run(async () => { if (confirm('Teachers will need to type the new key. Continue?')) { await api('settings.newKey'); refresh(); } });
+    $('#newkey').onclick = () => run(async () => { if (confirm('Every Teachers\' PC will have to enter the new key once. Only do this if the old key has leaked. Continue?')) { await api('settings.newKey'); refresh(); } });
+    const fw = $('#fw'); if (fw) fw.onclick = () => run(async () => { fw.disabled = true; try { await api('net.firewall'); toast('Done. Teachers\' PCs can now connect.'); } finally { fw.disabled = false; } });
     $('#csave').onclick = () => run(async () => { await api('settings.cloud', { url: $('#cu').value, key: $('#ck').value }); toast('Saved'); $('#ck').value = ''; });
     $('#ctest').onclick = () => run(async () => { await api('settings.cloud', { url: $('#cu').value, key: $('#ck').value }); await api('cloud.test'); toast('✓ Cloud connection works'); });
     $('#cpush').onclick = () => run(async () => { toast('Sending…'); S.sync = await api('cloud.pushAll'); paintCloudSt(); toast(S.sync.error ? S.sync.error : '✓ Everything is in the cloud', !!S.sync.error); });
@@ -265,7 +263,6 @@ alter table records enable row level security;</pre><button class="sm" id="cpsql
   },
 };
 const kindChip = k => k === 'fees' ? chip('SCHOOL FEES', 'blue') : k === 'admission' ? chip('ADMISSION', 'amber') : chip('SALARY', 'grey');
-
 
 function newApplication() {
   const m = modal('New application', `<form id="af"><div class="grid2"><div class="field"><label>First name *</label><input name="first" required></div><div class="field"><label>Surname *</label><input name="last" required></div>
