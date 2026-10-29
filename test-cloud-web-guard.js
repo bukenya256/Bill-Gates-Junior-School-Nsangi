@@ -1,0 +1,1 @@
+const assert=require('node:assert/strict');const fs=require('node:fs');const cloud=fs.readFileSync('src/core/cloud.js','utf8');assert.ok(cloud.includes("!this.hm.d.dirty['marks:'+d.id]"),'Pending offline mark must not be overwritten by a cloud pull');console.log('Cloud conflict guard: pass');

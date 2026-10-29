@@ -39,7 +39,7 @@ async function sendBatch({ username, key, senderId, endpoint }, to, message) {
   let j; try { j = JSON.parse(text); } catch (e) { throw new Error('The SMS company sent an unexpected answer (' + r.status + ').'); }
   const rec = j && j.SMSMessageData && j.SMSMessageData.Recipients;
   if (!Array.isArray(rec)) throw new Error((j && j.SMSMessageData && j.SMSMessageData.Message) || 'The SMS company did not accept the message.');
-  return rec.map(x => ({ phone: x.number, ok: [100, 101, 102].includes(Number(x.statusCode)), status: x.status || '', cost: x.cost || '' }));
+  return rec.map(x => ({ phone: x.number, ok: [100, 101, 102].includes(Number(x.statusCode)), status: x.status || '', statusCode: Number(x.statusCode), messageId: x.messageId || '', delivery: 'unconfirmed', cost: x.cost || '' }));
 }
 
 module.exports = { normalizePhone, fillTemplate, segments, sendBatch };

@@ -1,0 +1,1 @@
+BGS web pilot added under `web/` with Supabase Auth roles, safe server-side fee/mark RPCs, responsive portal and desktop pull of web-origin payments/marks. See `web/README.md` for rollout gates and setup. Not yet production-approved.

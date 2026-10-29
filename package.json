@@ -1,12 +1,12 @@
 {
   "name": "bgs-school-system",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "description": "Bill Gates Junior School Nsangi \u2013 School Management System",
   "author": "Bill Gates Junior School Nsangi",
   "main": "src/main.js",
   "scripts": {
     "start": "electron .",
-    "test": "node test-core.js && node test-net.js && node test-recovery.js && node test-sms.js",
+    "test": "node test-core.js && node test-net.js && node test-recovery.js && node test-sms.js && node test-cloud-web-guard.js",
     "dist": "electron-builder --win nsis portable --x64"
   },
   "devDependencies": {

@@ -152,7 +152,7 @@ class HM {
           for (const r of part) {
             const x = res.find(y => y.phone === r.phone);
             const good = !!(x && x.ok);
-            rec.log.push({ studentId: r.studentId, phone: r.phone, ok: good, status: x ? x.status : 'No answer', at: nowISO() });
+            rec.log.push({ studentId: r.studentId, phone: r.phone, ok: good, status: x ? x.status : 'No answer', messageId: x ? x.messageId : '', delivery: 'unconfirmed', at: nowISO() });
             if (good) sent++; else failed++;
           }
         } catch (e) {
@@ -165,7 +165,7 @@ class HM {
     rec.sent = rec.log.filter(x => x.ok).length;
     rec.failed = failed; rec.skipped = rs.length - ok.length;
     rec.status = failed ? (rec.sent ? 'partial' : 'failed') : 'sent'; rec.sentAt = nowISO();
-    this.touch('notifications', id); this.log('notification sent', `${rec.subject}: ${sent} sent, ${failed} failed`); this.done();
+    this.touch('notifications', id); this.log('notification submitted', `${rec.subject}: ${sent} accepted by provider, ${failed} rejected; phone delivery not confirmed`); this.done();
     return { sent, failed, skipped: rec.skipped, error: firstError, status: rec.status };
   }
 
