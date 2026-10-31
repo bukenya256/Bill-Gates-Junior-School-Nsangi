@@ -14,6 +14,22 @@ app.whenReady().then(() => {
   Menu.setApplicationMenu(null);
   const docs = app.getPath('documents');
   core = createApp({ dataDir: path.join(app.getPath('userData'), 'data'), backupDir: path.join(docs, 'BGS-Backups'), enc, notify: k => { if (win && !win.isDestroyed()) win.webContents.send('evt', k); } });
+  // Excel files for the Teachers' PC: save a downloaded sheet / pick a filled sheet to upload.
+  ipcMain.handle('file.save', async (_, name, b64) => {
+    try {
+      const r = await dialog.showSaveDialog(win, { title: 'Save Excel file', defaultPath: path.join(docs, path.basename(String(name || 'BGS.xlsx'))), filters: [{ name: 'Excel workbook', extensions: ['xlsx'] }] });
+      if (r.canceled || !r.filePath) return { ok: false, cancelled: true };
+      fs.writeFileSync(r.filePath, Buffer.from(String(b64 || ''), 'base64')); return { ok: true, path: r.filePath };
+    } catch (e) { return { ok: false, error: /EBUSY|EPERM|EACCES/.test(e.code || '') ? 'The file could not be saved. If it is open in Excel, close it and try again.' : 'The file could not be saved: ' + e.message }; }
+  });
+  ipcMain.handle('file.open', async () => {
+    try {
+      const r = await dialog.showOpenDialog(win, { title: 'Choose the filled marks sheet (Excel)', defaultPath: docs, filters: [{ name: 'Excel workbook', extensions: ['xlsx'] }], properties: ['openFile'] });
+      if (r.canceled || !r.filePaths[0]) return { ok: false, cancelled: true };
+      const st = fs.statSync(r.filePaths[0]); if (st.size > 10 * 1024 * 1024) return { ok: false, error: 'The file is too large (limit 10 MB).' };
+      return { ok: true, name: path.basename(r.filePaths[0]), data: fs.readFileSync(r.filePaths[0]).toString('base64') };
+    } catch (e) { return { ok: false, error: 'The file could not be opened: ' + e.message }; }
+  });
   ipcMain.handle('rpc', async (_, action, args) => {
     if (action === 'mode.set' || action === 'app.reset') {
       const r = await core.call(action, args);

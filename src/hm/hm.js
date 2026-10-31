@@ -23,7 +23,7 @@ async function enter() {
   const st = await api('hm.state'); S.year = st.current.year; S.term = st.current.term; S.period = `${st.current.year}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
   root.innerHTML = `<div class="app"><aside class="side"><div class="brand"><i><img class="school-icon" src="../assets/bgs-icon.png" alt=""></i><div>Bill Gates Junior<small>Nsangi · Headteacher</small></div></div><nav class="nav" id="nav"></nav>
     <div class="bottom"><button id="lock">${tabIcon("logout")} Lock / log out</button></div></aside>
-    <section class="main"><div class="top"><b style="color:var(--navy)">Academic year</b><select id="selY"></select><select id="selT"></select><span id="curtag"></span><span class="sp"></span><span id="syncchip"></span></div><div class="page" id="page"></div></section></div>`;
+    <section class="main"><div class="top"><b style="color:var(--navy)">Academic year</b><select id="selY"></select><select id="selT"></select><span id="curtag"></span><button class="sm" id="newyear" title="Move the whole school to the next academic year">New Year ▶</button><span class="sp"></span><span id="syncchip"></span></div><div class="page" id="page"></div></section></div>`;
   $('#lock').onclick = async () => { await api('auth.logout'); location.reload(); };
   $('#selY').onchange = e => { S.year = +e.target.value; refresh(); }; $('#selT').onchange = e => { S.term = +e.target.value; refresh(); };
   window.bgs.on(async k => { if (k === 'sync') { await loadSync(); } else if (k === 'changed') { if (!$('#modal') && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) refresh(); } });
@@ -43,11 +43,14 @@ async function refresh() {
   $('#selY').innerHTML = ys.map(y => `<option ${y === S.year ? 'selected' : ''}>${y}</option>`).join('');
   $('#selT').innerHTML = [1, 2, 3].map(t => `<option value="${t}" ${t === S.term ? 'selected' : ''}>Term ${t}</option>`).join('');
   $('#curtag').innerHTML = (S.year === S.d.current.year && S.term === S.d.current.term) ? chip('CURRENT TERM', 'green') : `<button class="sm" id="viewcur">Back to current term (${termTxt(S.d.current.year, S.d.current.term)})</button>`;
+  $('#newyear').onclick = startNewYear;
   const vc = $('#viewcur'); if (vc) vc.onclick = () => { S.year = S.d.current.year; S.term = S.d.current.term; refresh(); };
   $('#nav').innerHTML = NAV.map(n => n[0] === '#' ? `<div class="grp">${n[1]}</div>` : `<button data-p="${n[0]}" class="${S.page === n[0] ? 'on' : ''}">${tabIcon(n[0])}${n[1]}${n[0] === 'applications' && pendingCount() ? ` <span class="chip c-amber" style="margin-left:auto">${pendingCount()}</span>` : ''}</button>`).join('');
   $$('#nav button').forEach(b => b.onclick = () => { S.page = b.dataset.p; reportsView = null; refresh(); });
   paintSync(); await PAGES[S.page]();
 }
+const yc = s => (s.status === 'pending' ? s.className : (s.viewClass || s.className));   // the class the child was in during the year being viewed
+const inViewYear = s => s.status === 'pending' || !S.d || S.year >= S.d.current.year || !!s.viewClass;   // hide children admitted after the year being viewed
 const pendingCount = () => S.d.students.filter(s => s.status === 'pending').length;
 const head = (t, extra = '') => `<div class="pagehead"><h2>${t}</h2><span class="sp"></span>${extra}</div>`;
 const page = h => { $('#page').innerHTML = h; };
@@ -91,15 +94,15 @@ const PAGES = {
 
   students() {
     const draw = () => {
-      const f = S.f, list = S.d.students.filter(s => hit(s, f.q) && (!f.cls || s.className === f.cls) && (!f.ty || s.type === f.ty) && (f.st === 'all' || s.status === f.st));
+      const f = S.f, list = S.d.students.filter(s => inViewYear(s) && hit(s, f.q) && (!f.cls || yc(s) === f.cls) && (!f.ty || s.type === f.ty) && (f.st === 'all' || s.status === f.st));
       $('#tbl').innerHTML = list.length ? `<table class="t"><thead><tr><th>Student</th><th>Class</th><th>Day / Boarding</th><th class="n">Fee per term</th><th>Status</th><th>Parent</th><th></th></tr></thead><tbody>
-      ${list.map(s => `<tr><td>${nameCell(s)}</td><td>${esc(s.className)}</td><td>${s.type === 'boarding' ? chip('BOARDING', 'blue') : chip('DAY', 'grey')} ${s.status === 'pending' ? '' : `<button class="sm" data-ty="${esc(s.id)}">Switch to ${s.type === 'day' ? 'Boarding' : 'Day'}</button>`}</td>
+      ${list.map(s => `<tr><td>${nameCell(s)}</td><td>${esc(yc(s))}</td><td>${s.type === 'boarding' ? chip('BOARDING', 'blue') : chip('DAY', 'grey')} ${s.status === 'pending' ? '' : `<button class="sm" data-ty="${esc(s.id)}">Switch to ${s.type === 'day' ? 'Boarding' : 'Day'}</button>`}</td>
       <td class="n">${num(s.termFee)}</td><td>${stChip(s)} ${s.status === 'pending' ? '' : s.status === 'active' ? `<button class="sm danger" data-st="${esc(s.id)}|inactive">Make inactive</button>` : `<button class="sm ok" data-st="${esc(s.id)}|active">Make active</button>`}</td>
       <td>${esc(s.parent)}<span class="sub">${esc(s.phone)}</span></td><td class="act"><button class="sm" data-ed="${esc(s.id)}">Edit</button></td></tr>`).join('')}</tbody></table>` : '<div class="empty">No students match.</div>';
       $$('[data-ty]').forEach(b => b.onclick = () => switchType(b.dataset.ty)); $$('[data-st]').forEach(b => b.onclick = () => toggleStatus(...b.dataset.st.split('|'))); $$('[data-ed]').forEach(b => b.onclick = () => editStudent(b.dataset.ed));
     };
     const f = S.f;
-    page(`${head('Students', `<span class="muted">${S.d.students.filter(s => s.status === 'active').length} active</span>`)}<div class="bar"><input type="search" id="q" placeholder="Search name, admission number, parent…" value="${esc(f.q)}">
+    page(`${head('Students' + (S.year !== S.d.current.year ? ' — classes as in ' + S.year : ''), `<span class="muted">${S.d.students.filter(s => s.status === 'active' && inViewYear(s)).length} active</span>`)}<div class="bar"><input type="search" id="q" placeholder="Search name, admission number, parent…" value="${esc(f.q)}">
     <select id="fc">${clsOpts(f.cls)}</select><select id="fy"><option value="">Day & Boarding</option><option value="day" ${f.ty === 'day' ? 'selected' : ''}>Day only</option><option value="boarding" ${f.ty === 'boarding' ? 'selected' : ''}>Boarding only</option></select>
     <select id="fs">${[['active', 'Active'], ['inactive', 'Inactive'], ['pending', 'Pending admission'], ['all', 'All']].map(o => `<option value="${o[0]}" ${f.st === o[0] ? 'selected' : ''}>${o[1]}</option>`).join('')}</select></div><div id="tbl"></div>`);
     bindSearch('q', 'q', draw); $('#fc').onchange = e => { f.cls = e.target.value; draw(); }; $('#fy').onchange = e => { f.ty = e.target.value; draw(); }; $('#fs').onchange = e => { f.st = e.target.value; draw(); }; draw();
@@ -108,9 +111,9 @@ const PAGES = {
   classes() {
     const list = S.d.students.filter(s=>s.status !== 'pending' && (S.year < S.d.current.year || s.status !== 'inactive'));
     const select = S.f.cls || CLASSES[0];
-    const records = list.filter(s => (s.classHistory && s.classHistory[S.year] || s.className) === select);
-    page(`${head('Classes — Year ' + S.year)}<div class="classgrid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:9px;margin-bottom:15px">${CLASSES.map(c=>`<button data-classcard="${esc(c)}" class="card" style="cursor:pointer;text-align:left;padding:12px"><b>${esc(c)}</b><span class="sub">${list.filter(s=>(s.classHistory?.[S.year]||s.className)===c).length} student(s)</span></button>`).join('')}</div><div class="bar"><label>Choose class</label><select id="classpick">${CLASSES.map(c=>`<option ${select === c ? 'selected' : ''}>${c}</option>`).join('')}</select><span class="muted">${records.length} active students</span></div>
-    <div class="card"><h3>${esc(select)} · ${S.year}</h3>${records.length ? `<table class="t"><thead><tr><th>Admission no.</th><th>Student</th><th>Day / Boarding</th><th>Status</th></tr></thead><tbody>${records.map(s=>`<tr><td>${esc(s.id)}</td><td>${esc(s.first + ' ' + s.last)}</td><td>${typeLabel(s.type)}</td><td>${stChip(s)}</td></tr>`).join('')}</tbody></table>` : '<div class="empty">No active students in this class.</div>'}</div>`);
+    const records = list.filter(s => s.viewClass === select);
+    page(`${head('Classes — Year ' + S.year)}<div class="classgrid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:9px;margin-bottom:15px">${CLASSES.map(c=>`<button data-classcard="${esc(c)}" class="card" style="cursor:pointer;text-align:left;padding:12px"><b>${esc(c)}</b><span class="sub">${list.filter(s=>s.viewClass===c).length} student(s)</span></button>`).join('')}</div><div class="bar"><label>Choose class</label><select id="classpick">${CLASSES.map(c=>`<option ${select === c ? 'selected' : ''}>${c}</option>`).join('')}</select><span class="muted">${records.length} student${records.length === 1 ? '' : 's'} in ${S.year}</span></div>
+    <div class="card"><h3>${esc(select)} · ${S.year}</h3>${records.length ? `<table class="t"><thead><tr><th>Admission no.</th><th>Student</th><th>Day / Boarding</th><th>Status</th></tr></thead><tbody>${records.map(s=>`<tr><td>${esc(s.id)}</td><td>${esc(s.first + ' ' + s.last)}</td><td>${typeLabel(s.type)}</td><td>${stChip(s)}</td></tr>`).join('')}</tbody></table>` : '<div class="empty">No students in this class in ' + S.year + '.</div>'}</div>`);
     $('#classpick').onchange = e=>{S.f.cls=e.target.value;PAGES.classes();}; $$('[data-classcard]').forEach(b=>b.onclick=()=>{S.f.cls=b.dataset.classcard;PAGES.classes();});
   },
   discipline() {
@@ -135,10 +138,10 @@ const PAGES = {
 
   fees() {
     const draw = () => {
-      const f = S.f, list = S.d.students.filter(s => s.fee.has && hit(s, f.q) && (!f.cls || s.className === f.cls) && (!f.fee || s.fee.status === f.fee));
+      const f = S.f, list = S.d.students.filter(s => s.fee.has && hit(s, f.q) && (!f.cls || yc(s) === f.cls) && (!f.fee || s.fee.status === f.fee));
       const tot = list.reduce((a, s) => ({ due: a.due + s.fee.due, paid: a.paid + s.fee.paid, bal: a.bal + s.fee.balance, arr: a.arr + s.fee.arrears }), { due: 0, paid: 0, bal: 0, arr: 0 });
       $('#tbl').innerHTML = list.length ? `<table class="t"><thead><tr><th>Student</th><th>Class</th><th>Type</th><th class="n">Fees due</th><th class="n">Paid</th><th class="n">Balance</th><th class="n">Earlier terms owed</th><th>Status</th><th></th></tr></thead><tbody>
-      ${list.map(s => `<tr><td>${nameCell(s)}${s.status === 'inactive' ? ' ' + chip('INACTIVE', 'grey') : ''}</td><td>${esc(s.className)}</td><td>${typeLabel(s.fee.type)}</td><td class="n">${num(s.fee.due)}</td><td class="n paid">${num(s.fee.paid)}</td><td class="n ${s.fee.balance ? 'owe' : 'paid'}">${num(s.fee.balance)}</td><td class="n ${s.fee.arrears ? 'owe' : ''}">${num(s.fee.arrears)}</td><td>${feeChip(s.fee.status)}</td>
+      ${list.map(s => `<tr><td>${nameCell(s)}${s.status === 'inactive' ? ' ' + chip('INACTIVE', 'grey') : ''}</td><td>${esc(yc(s))}</td><td>${typeLabel(s.fee.type)}</td><td class="n">${num(s.fee.due)}</td><td class="n paid">${num(s.fee.paid)}</td><td class="n ${s.fee.balance ? 'owe' : 'paid'}">${num(s.fee.balance)}</td><td class="n ${s.fee.arrears ? 'owe' : ''}">${num(s.fee.arrears)}</td><td>${feeChip(s.fee.status)}</td>
       <td class="act">${s.fee.balance ? `<button class="pri sm" data-fp="${esc(s.id)}">Record payment</button>` : ''}<button class="sm" data-fh="${esc(s.id)}">History</button></td></tr>`).join('')}</tbody>
       <tfoot><tr><td colspan="3">TOTAL (${list.length} students)</td><td class="n">${num(tot.due)}</td><td class="n">${num(tot.paid)}</td><td class="n">${num(tot.bal)}</td><td class="n">${num(tot.arr)}</td><td colspan="2"></td></tr></tfoot></table>` : '<div class="empty">No fee records for this term yet. Bills appear for every active student once the term is the current term.</div>';
       $$('[data-fp]').forEach(b => b.onclick = () => feePay(b.dataset.fp)); $$('[data-fh]').forEach(b => b.onclick = () => feeHistory(b.dataset.fh));
@@ -230,7 +233,8 @@ const PAGES = {
     const st = await api('settings.get'), sms = await api('sms.get'), c = S.d.current; S.sync = st.cloud.status;
     page(`${head('Settings & Backup')}
     <div class="card"><h3>Current term</h3>
-    <div class="bar"><select id="cy">${[c.year + 1, c.year, c.year - 1].filter(y => y >= 2026).map(y => `<option ${y === c.year ? 'selected' : ''}>${y}</option>`).join('')}</select><select id="ct">${[1, 2, 3].map(t => `<option value="${t}" ${t === c.term ? 'selected' : ''}>Term ${t}</option>`).join('')}</select><button class="pri" id="setcur">Make this the current term</button> <span class="muted">Now: ${termTxt(c.year, c.term)}</span></div></div>
+    <div class="bar"><select id="cy">${[c.year + 1, c.year, c.year - 1].filter(y => y >= 2026).map(y => `<option ${y === c.year ? 'selected' : ''}>${y}</option>`).join('')}</select><select id="ct">${[1, 2, 3].map(t => `<option value="${t}" ${t === c.term ? 'selected' : ''}>Term ${t}</option>`).join('')}</select><button class="pri" id="setcur">Make this the current term</button> <span class="muted">Now: ${termTxt(c.year, c.term)}</span></div>
+    <div class="bar" style="margin-top:10px"><button class="pri" id="newyear2">Start new year (${c.year + 1}) ▶</button><span class="muted">Promoted learners move up, learners told to repeat stay in their class, ${c.year} records stay as they were.</span></div></div>
     <div class="card"><h3>Teachers' PC connection</h3>
     <p>School key: <span class="keybox">${esc(st.lan.key)}</span> <button class="sm" id="newkey">Make a new key</button></p>
     
@@ -249,6 +253,7 @@ const PAGES = {
     <div class="card"><h3>Headteacher password</h3><div class="bar"><input type="password" id="po" placeholder="Current password"><input type="password" id="pn" placeholder="New password"><button id="pchg">Change password</button></div></div>`);
     paintCloudSt(); loadSync();
     $('#setcur').onclick = () => run(async () => { await api('hm.setCurrentTerm', { year: +$('#cy').value, term: +$('#ct').value }); S.year = +$('#cy').value; S.term = +$('#ct').value; toast('Current term changed'); refresh(); });
+    $('#newyear2').onclick = startNewYear;
     $('#newkey').onclick = () => run(async () => { if (confirm('Every Teachers\' PC will have to enter the new key once. Only do this if the old key has leaked. Continue?')) { await api('settings.newKey'); refresh(); } });
     const fw = $('#fw'); if (fw) fw.onclick = () => run(async () => { fw.disabled = true; try { await api('net.firewall'); toast('Done. Teachers\' PCs can now connect.'); } finally { fw.disabled = false; } });
     $('#smssave').onclick = () => run(async () => { await api('settings.sms', { username: $('#smsu').value, key: $('#smsk').value, senderId: $('#smss').value }); $('#smsk').value = ''; toast('SMS settings saved'); PAGES.settings(); });
@@ -274,11 +279,26 @@ const PAGES = {
 };
 const kindChip = k => k === 'fees' ? chip('SCHOOL FEES', 'blue') : k === 'admission' ? chip('ADMISSION', 'amber') : chip('SALARY', 'grey');
 
+async function startNewYear() {
+  run(async () => {
+    const p = await api('hm.newYearPreview');
+    if (!p.canStart) { modal('New Year', `<div class="banner">The school is in <b>Term ${p.term} ${p.from}</b>. The new year can only be started once Term 3 is open, because the teachers record who is promoted during Term 3.</div><div class="mf" style="padding:0"><button data-x2>OK</button></div>`).querySelector('[data-x2]').onclick = closeModal; return; }
+    const m = modal(`Start ${p.to}?`, `<p style="margin-top:0">The system is now in <b>${p.from}</b>. Continuing will move the whole school to <b>${p.to}, Term 1</b> on this PC and on every Teachers' PC.</p>
+      <div class="sumbox"><div><span>Promoted by teachers – move up one class</span><b class="paid">${p.promoted}</b></div><div><span>Told to repeat – stay in the same class</span><b>${p.repeat}</b></div><div><span>No decision yet – stay in the same class</span><b class="${p.undecided ? 'owe' : ''}">${p.undecided}</b></div>${p.graduating ? `<div><span>Finishing P7 (become inactive)</span><b>${p.graduating}</b></div>` : ''}</div>
+      ${p.undecided ? `<div class="banner"><b>${p.undecided} learner${p.undecided === 1 ? ' has' : 's have'} no promotion decision.</b> They will stay in their present class in ${p.to}. If this is not what you want, cancel now and ask the Director of Studies to finish the Term 3 promotions.${p.undecidedNames.length ? '<br>' + p.undecidedNames.map(esc).join(', ') + (p.undecided > p.undecidedNames.length ? '…' : '') : ''}</div>` : ''}
+      <p class="muted">${p.from} stays available: choose ${p.from} in the Academic year box any time to see classes, fees, marks and reports exactly as they were. A safety backup is made first. This cannot be undone.</p>
+      <div class="mf" style="padding:0"><button data-x2>Cancel</button><button class="pri" id="goyear">Yes, start ${p.to}</button></div>`);
+    $('[data-x2]', m).onclick = closeModal;
+    $('#goyear').onclick = () => run(async () => { $('#goyear').disabled = true; const c = await api('hm.newYear', { confirm: true }); closeModal(); S.year = c.year; S.term = c.term; toast(`Welcome to ${c.year}. Teachers' PCs will follow within seconds.`); refresh(); });
+  });
+}
+document.addEventListener('input', e => { const el = e.target; if (el.classList && el.classList.contains('phone10')) el.value = el.value.replace(/\D/g, '').slice(0, 10); });
+
 function newApplication() {
   const m = modal('New application', `<form id="af"><div class="grid2"><div class="field"><label>First name *</label><input name="first" required></div><div class="field"><label>Surname *</label><input name="last" required></div>
   <div class="field"><label>Class applying for *</label><select name="className">${CLASSES.map(c => `<option>${c}</option>`).join('')}</select></div><div class="field"><label>Day or Boarding</label><select name="type"><option value="day">Day student</option><option value="boarding">Boarding student</option></select></div>
   <div class="field"><label>Gender</label><select name="gender"><option value="">—</option><option>Female</option><option>Male</option></select></div><div class="field"><label>Date of birth</label><input type="date" name="dob"></div>
-  <div class="field"><label>Parent / Guardian</label><input name="parent"></div><div class="field"><label>Phone</label><input name="phone"></div></div><div class="field"><label>Home address</label><input name="address"></div>
+  <div class="field"><label>Parent / Guardian</label><input name="parent"></div><div class="field"><label>Phone (10 digits)</label><input name="phone" class="phone10" inputmode="numeric" maxlength="10" pattern="\\d{10}" title="Exactly 10 digits, e.g. 0772123456" placeholder="0772123456" autocomplete="off"></div></div><div class="field"><label>Home address</label><input name="address"></div>
   <div class="sumbox"><div><span>Admission fee</span><b>${money(ADMISSION_FEE)}</b></div></div><div class="grid2"><div class="field"><label>Amount paid now (UGX) – leave empty if nothing</label><input class="money" name="paidNow" inputmode="numeric" placeholder="0"></div><div class="field"><label>Method</label><select name="method"><option>Cash</option><option>Mobile Money</option><option>Bank</option></select></div></div>
   <div class="mf" style="padding:0"><button type="button" data-x2>Cancel</button><button class="pri" type="submit">Save application</button></div></form>`);
   $('[data-x2]', m).onclick = closeModal;
@@ -328,7 +348,7 @@ function editStudent(id) {
   const s = S.d.students.find(x => x.id === id);
   const m = modal(`Edit – ${esc(s.id)}`, `<form id="ef"><div class="grid2"><div class="field"><label>First name</label><input name="first" value="${esc(s.first)}"></div><div class="field"><label>Surname</label><input name="last" value="${esc(s.last)}"></div>
   <div class="field"><label>Class</label><select name="className">${CLASSES.map(c => `<option ${c === s.className ? 'selected' : ''}>${c}</option>`).join('')}</select></div><div class="field"><label>Gender</label><select name="gender">${['', 'Female', 'Male'].map(g => `<option ${g === s.gender ? 'selected' : ''}>${g}</option>`).join('')}</select></div>
-  <div class="field"><label>Parent / Guardian</label><input name="parent" value="${esc(s.parent)}"></div><div class="field"><label>Phone</label><input name="phone" value="${esc(s.phone)}"></div></div><div class="field"><label>Address</label><input name="address" value="${esc(s.address || '')}"></div>
+  <div class="field"><label>Parent / Guardian</label><input name="parent" value="${esc(s.parent)}"></div><div class="field"><label>Phone (10 digits)</label><input name="phone" class="phone10" inputmode="numeric" maxlength="10" title="Exactly 10 digits, e.g. 0772123456" placeholder="0772123456" autocomplete="off" value="${esc(s.phone)}"></div></div><div class="field"><label>Address</label><input name="address" value="${esc(s.address || '')}"></div>
   <p class="muted">Changing the class also updates this term's fees automatically (e.g. P4 → P5).</p><div class="mf" style="padding:0"><button type="button" data-x2>Cancel</button><button class="pri" type="submit">Save</button></div></form>`);
   $('[data-x2]', m).onclick = closeModal; $('#ef').onsubmit = e => { e.preventDefault(); run(async () => { await api('hm.updateStudent', { id, f: Object.fromEntries(new FormData(e.target)) }); closeModal(); toast('Saved'); refresh(); }); };
 }

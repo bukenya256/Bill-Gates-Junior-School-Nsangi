@@ -146,6 +146,8 @@ function createApp({ dataDir, backupDir, notify = () => { }, enc = { enc: s => s
     'hm.paySalary': a => needHM().paySalary(a.id, a.period, a.amount, a.method, a.note),
     'hm.voidPayment': a => needHM().voidPayment(a.id, a.reason),
     'hm.setCurrentTerm': a => needHM().setCurrentTerm(a.year, a.term),
+    'hm.newYearPreview': () => needHM().newYearPreview(),
+    'hm.newYear': a => { const hm = needHM(); if (a.confirm !== true) throw new Fail('Please confirm before starting the new year.'); if (!hm.newYearPreview().canStart) hm.startNewYear(); /* throws the explanation */ backupNow(false); return hm.startNewYear(); },
     'hm.saveRemark': a => { needHM().saveHeadRemark(a.id, a.teacher, a.head); return true; },
 
     't.state': () => needT().state(),
@@ -153,6 +155,10 @@ function createApp({ dataDir, backupDir, notify = () => { }, enc = { enc: s => s
     't.setMark': m => needT().setMark(m),
     't.setComment': a => { needT().setComment(a.id, a.teacher, a.head); return true; },
     't.setPromotion': a => needT().setPromotion(a),
+    't.exportClassLists': () => needT().exportClassLists(),
+    't.exportMarksSheet': a => needT().exportMarksSheet(a),
+    't.previewMarksImport': a => needT().previewMarksImport(a),
+    't.applyMarksImport': a => needT().applyMarksImport(a),
     't.find': async () => { const t = needT(); t.lastFind = 0; const found = await t.findHM(); await t.sync(); return { found, note: t.findNote || '' }; },
     't.syncNow': async () => { await needT().sync(); return true; },
   };
@@ -160,7 +166,7 @@ function createApp({ dataDir, backupDir, notify = () => { }, enc = { enc: s => s
     A, backupNow, cfg,
     async call(action, args) {
       try { const f = H[action]; if (!f) throw new Fail('Unknown action ' + action); return { ok: true, data: await f(args || {}) }; }
-      catch (e) { if (!(e instanceof Fail) && !/^(Marks must|Enter the|Wrong|Please|Not the)/.test(e.message)) console.error(e); return { ok: false, error: e.message || String(e) }; }
+      catch (e) { if (!(e instanceof Fail) && !/^(Marks must|Enter the|Wrong|Please|Not the|This |Choose|There are|None of|Could not|The file|Admission|Enter this)/.test(e.message)) console.error(e); return { ok: false, error: e.message || String(e) }; }
     },
     shutdown() { A.hm && A.hm.s.flush(); A.teacher && A.teacher.s.flush(); A.timers.forEach(clearInterval); A.cloud && A.cloud.stop(); A.teacher && A.teacher.stop(); A.server && A.server.close(); },
   };
