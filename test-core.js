@@ -14,7 +14,7 @@ p=hm.payFees(id,2026,3,50000); assert.equal(p.paidTotal,250000); assert.equal(p.
 hm.setType(id,'day'); st=hm.getState().students[0]; assert.equal(st.fee.due,300000); assert.equal(st.fee.balance,50000);
 hm.setType(id,'boarding'); assert.equal(hm.getState().students[0].fee.balance,250000);
 hm.setStudentStatus(id,'inactive','indiscipline'); hm.setStudentStatus(id,'active');
-const w=hm.addStaff({first:'Moses',last:'K',title:'Teacher',salary:'300,000'});
+const w=hm.addStaff({first:'Moses',last:'K',title:'Teacher',salary:'300,000',employedOn:'2026-10-01'});
 hm.paySalary(w.id,'2026-10',200000); let sw=hm.getState({period:'2026-10'}).staff[0]; assert.equal(sw.period.balance,100000);
 hm.setStaffStatus(w.id,'inactive'); assert.equal(hm.getState().staff.length,1);
 

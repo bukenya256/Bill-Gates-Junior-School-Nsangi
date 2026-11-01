@@ -62,7 +62,7 @@ function printRaw(body, css, title) {
 }
 const printReceipt = p => printRaw(receiptHTML(p), RECEIPT_CSS, 'Receipt ' + p.receiptNo);
 function showReceipt(p, headline) {
-  const m = modal(headline || 'Receipt recorded', `<div class="banner info">Receipt <b>${esc(p.receiptNo)}</b> has been saved and queued for the cloud backup.</div>
+  const m = modal(headline || 'Receipt recorded', `<p style="margin-top:0">Receipt <b>${esc(p.receiptNo)}</b> has been saved.</p>
     <div class="sumbox"><div><span>${p.kind === 'salary' ? 'Salary due' : 'Total due'}</span><b>${money(p.due)}</b></div><div><span>Paid now</span><b class="paid">${money(p.amount)}</b></div><div><span>Total paid</span><b>${money(p.paidTotal)}</b></div><div class="tot"><span>Balance</span><b class="${p.balance ? 'owe' : 'paid'}">${p.balance ? money(p.balance) : 'CLEARED – PAID IN FULL'}</b></div></div>
     <div class="mf" style="padding:0"><button data-x2>Close</button><button class="pri" data-pr>Print receipt</button></div>`);
   $('[data-x2]', m).onclick = closeModal; $('[data-pr]', m).onclick = () => printReceipt(p);

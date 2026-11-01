@@ -3,7 +3,7 @@ const {createApp}=require('./src/core/app');
 const [,, dataDir=fs.mkdtempSync(path.join(os.tmpdir(),'bgsdev-')), port=5001, lan=4750]=process.argv;
 const clients=new Set();
 const core=createApp({dataDir,backupDir:path.join(dataDir,'bk'),port:+lan,notify:k=>clients.forEach(r=>r.write(`data: ${k}\n\n`))});
-const BRIDGE=`window.bgs={call:async(a,g)=>{const r=await (await fetch('/rpc',{method:'POST',body:JSON.stringify({a,g})})).json();if(!r.ok)throw new Error(r.error);return r.data},on:cb=>{const e=new EventSource('/events');e.onmessage=m=>cb(m.data)},saveFile:async(n,d)=>{const a=document.createElement('a');a.href='data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,'+d;a.download=n;document.body.appendChild(a);a.click();a.remove();window.__lastSaved={name:n,data:d};return{ok:true,path:n}},openFile:async()=>window.__nextFile?{ok:true,...window.__nextFile}:{ok:false,cancelled:true}};`;
+const BRIDGE=`window.bgs={call:async(a,g)=>{const r=await (await fetch('/rpc',{method:'POST',body:JSON.stringify({a,g})})).json();if(!r.ok)throw new Error(r.error);return r.data},on:cb=>{const e=new EventSource('/events');e.onmessage=m=>cb(m.data)}};`;
 const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.svg':'image/svg+xml','.png':'image/png','.jpeg':'image/jpeg','.webp':'image/webp'};
 http.createServer((q,s)=>{
  if(q.url==='/bridge.js'){s.setHeader('content-type','text/javascript');return s.end(BRIDGE)}

@@ -1,12 +1,12 @@
 {
   "name": "bgs-school-system",
-  "version": "1.6.0",
-  "description": "Bill Gates Junior School Nsangi – School Management System",
+  "version": "1.5.1",
+  "description": "Bill Gates Junior School Nsangi \u2013 School Management System",
   "author": "Bill Gates Junior School Nsangi",
   "main": "src/main.js",
   "scripts": {
     "start": "electron .",
-    "test": "node test-core.js && node test-net.js && node test-recovery.js && node test-sms.js && node test-cloud-web-guard.js && node test-year-excel.js",
+    "test": "node test-core.js && node test-net.js && node test-recovery.js && node test-sms.js && node test-cloud-web-guard.js && node test-new-features.js",
     "dist": "electron-builder --win nsis portable --x64"
   },
   "devDependencies": {
@@ -29,28 +29,21 @@
         "portable"
       ],
       "signAndEditExecutable": false,
-      "icon": "src/assets/bgs-icon.ico"
+      "icon": "src/assets/bgs-icon.ico",
+      "artifactName": "BGS-School-System-Setup-${version}.${ext}"
     },
     "nsis": {
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
-      "shortcutName": "BGS School System"
+      "shortcutName": "BGS School System",
+      "installerIcon": "src/assets/bgs-icon.ico",
+      "uninstallerIcon": "src/assets/bgs-icon.ico"
     },
     "portable": {
-      "artifactName": "BGS-School-System-Portable-${version}.exe"
+      "artifactName": "BGS-School-System-Portable-${version}.${ext}"
     },
-    "artifactName": "BGS-School-System-Setup-${version}.exe",
-    "mac": {
-      "icon": "src/assets/bgs-icon.icns",
-      "target": [
-        "dmg"
-      ],
-      "category": "public.app-category.education"
-    }
-  },
-  "dependencies": {
-    "exceljs": "^4.4.0"
+    "artifactName": "BGS-School-System-Setup-${version}.${ext}"
   }
 }

@@ -7,7 +7,8 @@ function createApp({ dataDir, backupDir, notify = () => { }, enc = { enc: s => s
   const cfgFile = path.join(dataDir, 'config.json');
   let cfg = {}; try { cfg = JSON.parse(fs.readFileSync(cfgFile, 'utf8')); } catch (e) {  }
   const saveCfg = () => fs.writeFileSync(cfgFile, JSON.stringify(cfg), { mode: 0o600 });
-  const A = { mode: cfg.mode || null, hm: null, cloud: null, server: null, teacher: null, authed: false, timers: [] };
+  const A = { mode: 'single', activeRole: null, hm: null, cloud: null, server: null, teacher: null, authed: false, timers: [] };
+  cfg.mode = 'single'; saveCfg();
 
   let lastBackupContent = null;
   function backupNow(auto) {
@@ -21,7 +22,7 @@ function createApp({ dataDir, backupDir, notify = () => { }, enc = { enc: s => s
     return f;
   }
   function init() {
-    if (A.mode === 'hm' && !A.hm) {
+    if (!A.hm) {
       A.hm = new HM(new Store(path.join(dataDir, 'hm-data.json'), DEFAULTS), { onChange: () => { A.cloud && A.cloud.kick(); notify('changed'); } });
       A.cloud = new Cloud(A.hm, () => cfg.cloud ? { url: cfg.cloud.url, key: cfg.cloud.key, getToken: cloudToken } : null, () => notify('sync'));
       A.server = startServer(A.hm, port);
@@ -29,12 +30,12 @@ function createApp({ dataDir, backupDir, notify = () => { }, enc = { enc: s => s
       A.timers.push(setInterval(() => { try { A.hm.s.flush(); const current=fs.readFileSync(path.join(dataDir,'hm-data.json'),'utf8'); if(current!==lastBackupContent) backupNow(true); } catch(e) { console.error('Automatic local backup failed:', e.message); } },30000));
       setTimeout(() => A.cloud && A.cloud.syncCycle(), 3000);
     }
-    if (A.mode === 'teacher' && !A.teacher) A.teacher = new Teacher(new Store(path.join(dataDir, 'teacher-data.json'), TDEF), () => notify('changed'), { discoveryPort: port + 1 });
+    if (!A.teacher) { A.teacher = new Teacher(new Store(path.join(dataDir, 'teacher-data.json'), TDEF), () => notify('changed'), { discoveryPort: port + 1 }); A.teacher.setConfig({ hm: '127.0.0.1:' + port, key: A.hm.d.meta.lanKey, teacher: 'School Teacher' }); }
   }
   init();
   const lanIps = () => Object.values(os.networkInterfaces()).flat().filter(i => i && i.family === 'IPv4' && !i.internal).map(i => i.address);
-  const needHM = () => { if (!A.hm) throw new Fail('Not the Headteacher PC.'); if (!A.authed) throw new Fail('Please log in first.'); return A.hm; };
-  const needT = () => { if (!A.authed) throw new Fail('Please log in first.'); if (!A.teacher) throw new Fail('Not the Teachers PC.'); return A.teacher; };
+  const needHM = () => { if (!A.hm) throw new Fail('School database is unavailable.'); if (A.activeRole !== 'hm' || !A.authed) throw new Fail('Please log in as Headteacher first.'); return A.hm; };
+  const needT = () => { if (A.activeRole !== 'teacher' || !A.authed) throw new Fail('Please log in as Teacher first.'); if (!A.teacher) throw new Fail('Teacher workspace is unavailable.'); return A.teacher; };
 
   let tokenPromise = null;
   async function cloudToken() {
@@ -59,13 +60,14 @@ function createApp({ dataDir, backupDir, notify = () => { }, enc = { enc: s => s
   const smsSender = (...a) => require('./sms').sendBatch(...a);
 
   const H = {
-    'mode.get': () => ({ mode: A.mode }),
-    'mode.set': m => { if (A.mode && A.mode !== m) throw new Fail('This computer is already set up. Use Settings → Reset to change it.'); if (!['hm', 'teacher'].includes(m)) throw new Fail('Bad mode'); A.mode = cfg.mode = m; saveCfg(); init(); return { mode: m }; },
-    'auth.status': () => ({ hasPassword: A.hm ? A.hm.hasPassword() : !!cfg.teacherPassword, authed: A.authed }),
-    'auth.setup': ({ pw }) => { if (!A.hm && A.teacher) { if(cfg.teacherPassword) throw new Fail('Password already set.'); if(String(pw||'').length<8) throw new Fail('Use at least 8 characters.'); const salt=crypto.randomBytes(16).toString('hex');cfg.teacherPassword={salt,hash:crypto.scryptSync(pw,salt,32).toString('hex')};saveCfg();A.authed=true;return true; } if (!A.hm) throw new Fail('Not the Headteacher PC.'); if (A.hm.hasPassword()) throw new Fail('Password already set.'); A.hm.setPassword(pw); A.authed = true; return true; },
-    'auth.login': ({ pw }) => { if (!A.hm && A.teacher) { const p=cfg.teacherPassword;if(!p)throw new Fail('Set a password first.');const a=crypto.scryptSync(String(pw||''),p.salt,32),b=Buffer.from(p.hash,'hex');if(a.length!==b.length||!crypto.timingSafeEqual(a,b))throw new Fail('Wrong password.');A.authed=true;return true; } if (!A.hm) throw new Fail('Not the Headteacher PC.'); if (!A.hm.checkPassword(pw)) throw new Fail('Wrong password.'); A.authed = true; return true; },
-    'auth.logout': () => { A.authed = false; return true; },
-    'auth.change': ({ old, pw }) => { if(A.teacher) {needT(); const p=cfg.teacherPassword;if(!p||!crypto.timingSafeEqual(crypto.scryptSync(String(old||''),p.salt,32),Buffer.from(p.hash,'hex')))throw new Fail('Old password is wrong.');if(String(pw||'').length<8)throw new Fail('Use at least 8 characters.'); const salt=crypto.randomBytes(16).toString('hex');cfg.teacherPassword={salt,hash:crypto.scryptSync(pw,salt,32).toString('hex')};saveCfg();return true;} needHM().setPassword(pw, old); return true; },
+    'mode.get': () => ({ mode: 'single' }),
+    'role.select': ({ role }) => { if (!['hm','teacher'].includes(role)) throw new Fail('Choose Headteacher or Teacher.'); A.activeRole = role; A.authed = false; return { role }; },
+    'mode.set': m => { if (!['hm','teacher'].includes(m)) throw new Fail('Choose Headteacher or Teacher.'); A.mode = cfg.mode = 'single'; A.activeRole = m; A.authed = false; saveCfg(); init(); return { mode: 'single', role: m }; },
+    'auth.status': () => ({ role: A.activeRole, hasPassword: A.activeRole === 'teacher' ? !!cfg.teacherPassword : (A.activeRole === 'hm' && A.hm ? A.hm.hasPassword() : false), authed: A.authed }),
+    'auth.setup': ({ pw }) => { if (A.activeRole === 'teacher') { if(cfg.teacherPassword) throw new Fail('Teacher password already set.'); if(String(pw||'').length<8) throw new Fail('Use at least 8 characters.'); const salt=crypto.randomBytes(16).toString('hex');cfg.teacherPassword={salt,hash:crypto.scryptSync(pw,salt,32).toString('hex')};saveCfg();A.authed=true;return true; } if (A.activeRole !== 'hm' || !A.hm) throw new Fail('Choose a role first.'); if (A.hm.hasPassword()) throw new Fail('Headteacher password already set.'); A.hm.setPassword(pw); A.authed = true; return true; },
+    'auth.login': ({ pw }) => { if (A.activeRole === 'teacher') { const p=cfg.teacherPassword;if(!p)throw new Fail('Create the Teacher password first.');const a=crypto.scryptSync(String(pw||''),p.salt,32),b=Buffer.from(p.hash,'hex');if(a.length!==b.length||!crypto.timingSafeEqual(a,b))throw new Fail('Wrong Teacher password.');A.authed=true;return true; } if (A.activeRole !== 'hm' || !A.hm) throw new Fail('Choose a role first.'); if (!A.hm.checkPassword(pw)) throw new Fail('Wrong Headteacher password.'); A.authed = true; return true; },
+    'auth.logout': () => { A.authed = false; A.activeRole = null; return true; },
+    'auth.change': ({ old, pw }) => { if(A.activeRole === 'teacher') {needT(); const p=cfg.teacherPassword;if(!p||!crypto.timingSafeEqual(crypto.scryptSync(String(old||''),p.salt,32),Buffer.from(p.hash,'hex')))throw new Fail('Old password is wrong.');if(String(pw||'').length<8)throw new Fail('Use at least 8 characters.');const salt=crypto.randomBytes(16).toString('hex');cfg.teacherPassword={salt,hash:crypto.scryptSync(pw,salt,32).toString('hex')};saveCfg();return true;} needHM().setPassword(pw, old); return true; },
     'settings.get': () => { const hm = needHM(); return { lan: { ips: lanIps(), port, key: hm.d.meta.lanKey, error: A.server && (A.server.lastError || A.server.discoveryError()), peers: A.server ? A.server.peers() : [], windows: process.platform === 'win32' }, cloud: { url: cfg.cloud?.url || '', hasKey: !!cfg.cloud?.key, signedIn: !!cfg.cloud?.session, status: A.cloud.status() }, backupDir, dataDir }; },
     'settings.cloud': ({ url, key }) => { needHM(); const nextUrl=String(url||'').trim();const nextKey=String(key||'').trim(); if(nextKey && !/^sb_publishable_[\w-]+$/.test(nextKey))throw new Fail('Use the Supabase publishable key (sb_publishable_), never a secret or service_role key.'); const old=cfg.cloud||{};if(!nextKey && old.key && !old.key.startsWith('sb_publishable_'))throw new Fail('Replace the old privileged cloud key with a Supabase publishable key.');cfg.cloud=nextUrl?{url:nextUrl,key:nextKey||old.key||'',session:nextUrl===old.url&&(!nextKey||nextKey===old.key)?old.session:null}:null;saveCfg();A.cloud.st.error='';A.cloud.refresh();return true; },
     'cloud.login': async ({email,password}) => {needHM();const c=cfg.cloud;if(!c?.url||!c?.key)throw new Fail('Save the cloud URL and publishable key first.');if(!email||!password)throw new Fail('Enter the school cloud email and password.');const r=await fetch(c.url.replace(/\/+$/,'')+'/auth/v1/token?grant_type=password',{method:'POST',headers:{apikey:c.key,'Content-Type':'application/json'},body:JSON.stringify({email,password}),signal:AbortSignal.timeout(20000)});const d=await r.json();if(!r.ok||!d.access_token||!d.refresh_token)throw new Fail('Cloud login failed. Check the account credentials.');
@@ -104,9 +106,9 @@ function createApp({ dataDir, backupDir, notify = () => { }, enc = { enc: s => s
       const ps = `Start-Process -FilePath cmd.exe -ArgumentList '/c ${inner.replace(/'/g, "''")}' -Verb RunAs -WindowStyle Hidden -Wait`;
       execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', ps], { timeout: 120000, windowsHide: true }, err => err ? reject(new Fail('Windows did not allow the change. Click Yes when Windows asks for permission, then try again.')) : resolve(true));
     }),
-    'backup.now': () => ({ file: backupNow(false) }),
+    'backup.now': () => { needHM(); return { file: backupNow(false) }; },
     'settings.newKey': () => { const hm = needHM(); hm.d.meta.lanKey = require('crypto').randomBytes(4).toString('hex').toUpperCase().replace(/(.{4})/, '$1-'); hm.done(); return hm.d.meta.lanKey; },
-    'app.reset': () => { if (A.hm) needHM(); cfg.mode = null; saveCfg(); return { restart: true }; },
+    'app.reset': () => { if (A.hm) needHM(); cfg.mode = 'single'; A.activeRole = null; A.authed = false; saveCfg(); return { restart: true }; },
 
     'hm.state': a => needHM().getState(a),
     'hm.marks': ({ year }) => needHM().getMarks(year),
@@ -146,8 +148,6 @@ function createApp({ dataDir, backupDir, notify = () => { }, enc = { enc: s => s
     'hm.paySalary': a => needHM().paySalary(a.id, a.period, a.amount, a.method, a.note),
     'hm.voidPayment': a => needHM().voidPayment(a.id, a.reason),
     'hm.setCurrentTerm': a => needHM().setCurrentTerm(a.year, a.term),
-    'hm.newYearPreview': () => needHM().newYearPreview(),
-    'hm.newYear': a => { const hm = needHM(); if (a.confirm !== true) throw new Fail('Please confirm before starting the new year.'); if (!hm.newYearPreview().canStart) hm.startNewYear(); /* throws the explanation */ backupNow(false); return hm.startNewYear(); },
     'hm.saveRemark': a => { needHM().saveHeadRemark(a.id, a.teacher, a.head); return true; },
 
     't.state': () => needT().state(),
@@ -155,10 +155,6 @@ function createApp({ dataDir, backupDir, notify = () => { }, enc = { enc: s => s
     't.setMark': m => needT().setMark(m),
     't.setComment': a => { needT().setComment(a.id, a.teacher, a.head); return true; },
     't.setPromotion': a => needT().setPromotion(a),
-    't.exportClassLists': () => needT().exportClassLists(),
-    't.exportMarksSheet': a => needT().exportMarksSheet(a),
-    't.previewMarksImport': a => needT().previewMarksImport(a),
-    't.applyMarksImport': a => needT().applyMarksImport(a),
     't.find': async () => { const t = needT(); t.lastFind = 0; const found = await t.findHM(); await t.sync(); return { found, note: t.findNote || '' }; },
     't.syncNow': async () => { await needT().sync(); return true; },
   };
@@ -166,7 +162,7 @@ function createApp({ dataDir, backupDir, notify = () => { }, enc = { enc: s => s
     A, backupNow, cfg,
     async call(action, args) {
       try { const f = H[action]; if (!f) throw new Fail('Unknown action ' + action); return { ok: true, data: await f(args || {}) }; }
-      catch (e) { if (!(e instanceof Fail) && !/^(Marks must|Enter the|Wrong|Please|Not the|This |Choose|There are|None of|Could not|The file|Admission|Enter this)/.test(e.message)) console.error(e); return { ok: false, error: e.message || String(e) }; }
+      catch (e) { if (!(e instanceof Fail) && !/^(Marks must|Enter the|Wrong|Please|Not the)/.test(e.message)) console.error(e); return { ok: false, error: e.message || String(e) }; }
     },
     shutdown() { A.hm && A.hm.s.flush(); A.teacher && A.teacher.s.flush(); A.timers.forEach(clearInterval); A.cloud && A.cloud.stop(); A.teacher && A.teacher.stop(); A.server && A.server.close(); },
   };

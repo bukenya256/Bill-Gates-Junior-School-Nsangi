@@ -16,6 +16,6 @@ const d=fs.mkdtempSync(path.join(os.tmpdir(),'bgs-v14-'));
  app.shutdown();
  const t=createApp({dataDir:path.join(d,'teacher'),backupDir:path.join(d,'tbak'),port:0});
  await callDummy();
- async function callDummy(){assert.equal((await t.call('mode.set','teacher')).ok,true);assert.equal((await t.call('t.state')).ok,false);assert.equal((await t.call('auth.setup',{pw:'abcdefgh'})).ok,true);assert.equal((await t.call('t.state')).ok,true);assert.equal((await t.call('auth.logout')).ok,true);assert.equal((await t.call('t.state')).ok,false);assert.equal((await t.call('auth.login',{pw:'wrong'})).ok,false);assert.equal((await t.call('auth.login',{pw:'abcdefgh'})).ok,true);}
+ async function callDummy(){assert.equal((await t.call('mode.set','teacher')).ok,true);assert.equal((await t.call('t.state')).ok,false);assert.equal((await t.call('auth.setup',{pw:'abcdefgh'})).ok,true);assert.equal((await t.call('t.state')).ok,true);assert.equal((await t.call('auth.logout')).ok,true);assert.equal((await t.call('t.state')).ok,false);assert.equal((await t.call('role.select',{role:'teacher'})).ok,true);assert.equal((await t.call('auth.login',{pw:'wrong'})).ok,false);assert.equal((await t.call('auth.login',{pw:'abcdefgh'})).ok,true);}
  t.shutdown(); console.log('v1.4 academics/notifications/teacher auth OK');
 })().catch(e=>{console.error(e);process.exitCode=1});

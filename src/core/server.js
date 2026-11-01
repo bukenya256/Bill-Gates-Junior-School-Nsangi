@@ -25,7 +25,7 @@ function startServer(hm, port = 4750) {
       if (req.method === 'POST' && u.pathname === '/api/teacher/push') {
         let body = '', size = 0;
         req.on('data', c => { size += c.length; if (size > 8e6) req.destroy(); else body += c; });
-        req.on('end', () => { try { const j = JSON.parse(body); let n = hm.acceptMarks(j.marks || [], j.comments || [], String(j.device || '')); const rejected = []; for (const p of j.promotions || []) { try { hm.recordPromotion(p); n++; } catch (e) { rejected.push({ key: p && p.key, error: e.message }); } } send(res, 200, { ok: true, accepted: n, rejected }); } catch (e) { send(res, 400, { error: 'Bad data' }); } });
+        req.on('end', () => { try { const j = JSON.parse(body); let n = hm.acceptMarks(j.marks || [], j.comments || [], String(j.device || '')); for (const p of j.promotions || []) { hm.recordPromotion(p); n++; } send(res, 200, { ok: true, accepted: n }); } catch (e) { send(res, 400, { error: 'Bad data' }); } });
         return;
       }
       send(res, 404, { error: 'Not found' });
