@@ -1,7 +1,7 @@
 'use strict';
 
 class Cloud {
-  constructor(hm, getCfg, onStatus) { this.hm = hm; this.getCfg = getCfg; this.onStatus = onStatus || (() => { }); this.busy = false; this.timer = null; this.st = { state: 'off', pending: 0, last: null, error: '' }; this.loop = setInterval(() => this.syncCycle(), 8000); this.pulling = false; this.refresh(); }
+  constructor(hm, getCfg, onStatus) { this.hm = hm; this.getCfg = getCfg; this.onStatus = onStatus || (() => { }); this.busy = false; this.timer = null; this.st = { state: 'off', pending: 0, last: null, error: '' }; this.loop = setInterval(() => this.syncCycle(), 8000); this.refresh(); }
   status() { this.st.pending = Object.keys(this.hm.d.dirty).length; return this.st; }
   refresh() { const c = this.getCfg(); this.st.state = c && c.url && c.key && c.getToken ? (this.st.error ? 'error' : this.status().pending ? 'pending' : 'ok') : 'off'; this.onStatus(this.status()); }
   kick() { clearTimeout(this.timer); this.timer = setTimeout(() => this.flush(), 400); this.refresh(); }
@@ -42,38 +42,8 @@ class Cloud {
     finally { this.busy = false; this.refresh(); }
   }
   async syncCycle() {
-    if (this.busy || this.pulling) return;
-    await this.pullWebChanges();
+    if (this.busy) return;
     await this.flush();
-  }
-  async pullWebChanges() {
-    const c = this.getCfg(); if (!c?.url || !c?.key || this.busy || this.pulling) return;
-    this.pulling = true;
-    try {
-      // Pull only web-origin records. Do not replace the full local school database.
-      const url = c.url.replace(/\/+$/, '') + '/rest/v1/records?select=key,collection,data,updated_at&collection=in.(payments,marks)&data-%3E%3Esource=eq.web&order=key.asc';
-      const rows = [];
-      for (let offset=0; offset<100000;offset+=500) {
-        const r=await fetch(url,{headers:{...(await this._headers(c)),Range:`${offset}-${offset+499}`,'Range-Unit':'items'},signal:AbortSignal.timeout(20000)});
-        if(!r.ok) throw new Error('Web changes download failed: '+r.status);
-        const batch=await r.json(); if(!Array.isArray(batch)) throw new Error('Invalid web response');
-        rows.push(...batch); if(batch.length<500) break;
-      }
-      let changed=0;
-      for(const row of rows){
-        const d=row.data; if(!d || typeof d!=='object') continue;
-        if(row.collection==='payments' && row.key==='payments:'+d.id && d.source==='web' && d.kind==='fees' && this.hm.d.students[d.studentId] && Number.isInteger(d.amount) && d.amount>0 && Number.isInteger(d.year) && [1,2,3].includes(d.term) && !this.hm.d.payments[d.id]) { this.hm.d.payments[d.id]=d;changed++; }
-        if(row.collection==='marks' && row.key==='marks:'+d.id && d.source==='web' && this.hm.d.students[d.studentId] && Number.isInteger(d.score) && d.score>=0 && d.score<=100 && typeof d.at==='string'){
-          const old=this.hm.d.marks[d.id];
-          if(!this.hm.d.dirty['marks:'+d.id] && (!old || (Date.parse(old.at || '') || 0) < (Date.parse(d.at || '') || 0))){
-            // Preserve a newer offline desktop edit; it will upload on the next flush.
-            this.hm.d.marks[d.id]={...d,seq:this.hm.nextSeq()}; changed++;
-          }
-        }
-      }
-      if(changed){this.hm.log('cloud web import',String(changed)+' changes');this.hm.done();}
-      this.st.error='';this.st.last=new Date().toISOString();
-    }catch(e){this.st.error=String(e.message||e);} finally {this.pulling=false;this.refresh();}
   }
   async download() {
     const c = this.getCfg(); if (!c?.url || !c?.key) throw new Error('Configure Supabase first.');

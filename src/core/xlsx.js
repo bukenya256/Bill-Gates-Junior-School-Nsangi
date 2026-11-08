@@ -1,5 +1,5 @@
 'use strict';
-// Excel (.xlsx) files for the Teachers' PC:
+// Excel (.xlsx) files for the Teachers' screens:
 //   1. class lists (one sheet per class)
 //   2. a marks sheet for one class / year / term / exam that class teachers fill in
 //   3. reading that sheet back so the marks enter the system by themselves

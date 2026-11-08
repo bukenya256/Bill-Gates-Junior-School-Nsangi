@@ -3,9 +3,7 @@
 const assert = require('node:assert/strict'), os = require('os'), path = require('path'), fs = require('fs');
 const ExcelJS = require('exceljs');
 const R = require('./src/shared/rules');
-const { Store } = require('./src/core/store'), { HM, DEFAULTS } = require('./src/core/hm'), { startServer } = require('./src/core/server'), { Teacher, DEFAULTS: TD } = require('./src/core/teacher');
-const sleep = ms => new Promise(r => setTimeout(r, ms));
-const until = async (f, ms = 6000) => { const t = Date.now(); while (Date.now() - t < ms) { if (await f()) return true; await sleep(100); } return false; };
+const { Store } = require('./src/core/store'), { HM, DEFAULTS } = require('./src/core/hm'), { Teacher } = require('./src/core/teacher');
 
 (async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bgs-ye-'));
@@ -27,19 +25,15 @@ const until = async (f, ms = 6000) => { const t = Date.now(); while (Date.now() 
   hm.updateStudent(bukenya.id, { first: 'Bukenya', phone: '+256 700 111 222' });
   hm.updateStudent(bukenya.id, { phone: '0700111222' });
 
-  // ---------- 2. network: subjects + year reach the Teachers' PC ----------
-  const srv = startServer(hm, 4811);
-  const t = new Teacher(new Store(path.join(dir, 't.json'), TD), () => { }, { discoveryPort: 4812 });
-  t.setConfig({ hm: '127.0.0.1:4811', key: hm.d.meta.lanKey, teacher: 'Mr Okello' });
-  assert(await until(() => t.conn.state === 'online'), 'teacher connects');
+  // ---------- 2. subjects reach the Teachers' portal at once ----------
+  const t = new Teacher(hm, () => 'Mr Okello');
   hm.setSubjects('P1', ['Mathematics', 'English', 'Science', 'Handwriting']);
-  await t.sync();
-  assert.deepEqual(t.state().academic.subjects.P1, ['Mathematics', 'English', 'Science', 'Handwriting'], 'new subject reached the teacher PC');
+  assert.deepEqual(t.state().academic.subjects.P1, ['Mathematics', 'English', 'Science', 'Handwriting'], 'new subject is visible to the teachers immediately');
 
   // ---------- 3. a class with marks, promotions, then NEW YEAR ----------
   const names = ['Akello', 'Babirye', 'Chandiru', 'Dungu'];
   const p1 = names.map(n => add(n, 'P1', '07000000' + names.indexOf(n) + '1'));
-  await t.sync(); assert.equal(t.d.students.length, 1 + 1 + 1 + 4);
+  assert.equal(t.d.students.length, 1 + 1 + 1 + 4);
   const subjects = R.subjectsFor('P1');
   const eot = { year: 2026, term: 3, exam: 'EOT', cls: 'P1' };
 
@@ -82,7 +76,6 @@ const until = async (f, ms = 6000) => { const t = Date.now(); while (Date.now() 
   assert.equal(t.d.marks[R.markKey(2026, 3, 'EOT', akello.id, 'Mathematics')].score, 91);
   assert.equal(t.d.marks[R.markKey(2026, 3, 'EOT', babirye.id, 'Mathematics')].score, 67.5);
   assert.equal(t.d.marks[R.markKey(2026, 3, 'EOT', chandiru.id, 'Mathematics')].absent, true);
-  assert(await until(() => t.pending() === 0), 'marks reach HM PC');
   assert.equal(hm.d.marks[R.markKey(2026, 3, 'EOT', akello.id, 'Mathematics')].score, 91, 'marks arrived on the Headteacher PC');
   // uploading the same sheet again changes nothing; re-download shows entered marks
   const pv2 = await t.previewMarksImport({ ...eot, data: filled }); assert.equal(pv2.toSave, 0); assert.equal(pv2.same, 3);
@@ -94,16 +87,15 @@ const until = async (f, ms = 6000) => { const t = Date.now(); while (Date.now() 
   // finish marks for the promotion rule (everyone needs EOT marks)
   for (const s of p1) t.setMark({ ...eot, studentId: s.id, className: 'P1', subject: 'English', score: 60 });
   for (const s of [bukenya]) t.setMark({ year: 2026, term: 3, exam: 'EOT', studentId: s.id, className: 'Baby Class', subject: 'English', score: 70 });
-  await t.sync();
 
   // teacher decisions: promotion needs EOT marks (teacher side check)
-  assert.throws(() => t.setPromotion({ studentId: Object.values(hm.d.students).find(s => s.first === 'NoPhone').id, year: 2026, term: 3, decision: 'promoted' }), /End of Term marks first/);
+  assert.throws(() => t.setPromotion({ studentId: Object.values(hm.d.students).find(s => s.first === 'NoPhone').id, year: 2026, term: 3, decision: 'promoted' }), /Term 3 End of Term exam marks/);
   t.setPromotion({ studentId: bukenya.id, year: 2026, term: 3, decision: 'promoted' });
   t.setPromotion({ studentId: akello.id, year: 2026, term: 3, decision: 'promoted' });
   t.setPromotion({ studentId: babirye.id, year: 2026, term: 3, decision: 'repeat' });
   t.setPromotion({ studentId: chandiru.id, year: 2026, term: 3, decision: 'repeat' });
   // dungu: no decision at all
-  assert(await until(() => Object.keys(hm.d.promotions).length === 4), 'decisions reach HM');
+  assert.equal(Object.keys(hm.d.promotions).length, 4, 'decisions are in the school records at once');
 
   const pre = hm.newYearPreview();
   assert.deepEqual([pre.from, pre.to, pre.canStart, pre.promoted, pre.repeat], [2026, 2027, true, 2, 2]);
@@ -117,10 +109,10 @@ const until = async (f, ms = 6000) => { const t = Date.now(); while (Date.now() 
   assert.equal(S(akello.id).className, 'P2');
   assert.equal(S(babirye.id).className, 'P1', 'repeater stays');
   assert.equal(S(chandiru.id).className, 'P1', 'repeater stays');
-  assert.equal(S(dungu.id).className, 'P1', 'undecided stays');
+  assert.equal(S(dungu.id).status, 'inactive', 'undecided is NOT carried into 2027');
   assert.equal(S(bukenya.id).classHistory[2026], 'Baby Class'); assert.equal(S(bukenya.id).classHistory[2027], 'Middle Class');
-  assert.equal(S(dungu.id).classHistory[2026], 'P1');
-  assert(Object.values(hm.d.promotions).every(p => p.applied));
+  assert.equal(S(dungu.id).classHistory[2026], 'P1'); assert.equal(S(dungu.id).classHistory[2027], undefined);
+  assert(Object.values(hm.d.promotions).filter(p => p.decision !== 'none' && !p.lapsed).every(p => p.applied));
   assert.throws(() => hm.startNewYear(), /Term 3/, 'cannot start another year from Term 1');
 
   // a child admitted in 2027
@@ -132,20 +124,19 @@ const until = async (f, ms = 6000) => { const t = Date.now(); while (Date.now() 
   assert.equal(cls(v26, akello.id), 'P1'); assert.equal(cls(v27, akello.id), 'P2');
   assert.equal(cls(v27, nw.id), 'Baby Class'); assert.equal(cls(v26, nw.id), null, 'child admitted in 2027 is not in 2026');
   const inClass = (v, c) => v.filter(s => s.viewClass === c).map(s => s.first).sort();
-  assert.deepEqual(inClass(v27, 'P1'), ['Babirye', 'Chandiru', 'Dungu', 'NoPhone', 'Spaces'], 'only repeaters / undecided remain in P1 in 2027');
+  assert.deepEqual(inClass(v27, 'P1'), ['Babirye', 'Chandiru'], 'only repeaters remain in P1 in 2027');
   assert(!inClass(v27, 'P1').includes('Akello') && inClass(v27, 'P2').includes('Akello'));
   assert(inClass(v26, 'P1').includes('Akello') && inClass(v26, 'P1').includes('Dungu'));
   // fees: 2026 bill unchanged (Baby/nursery fee), 2027 bill follows the new class
   assert.equal(hm.d.bills[`2026|3|${akello.id}`].className, 'P1');
   assert.equal(hm.d.bills[`2027|1|${akello.id}`].className, 'P2');
   // old marks and reports for 2026 still come out right (roster by 2026 class)
-  await t.sync();
-  assert.deepEqual([t.state().current.year, t.state().current.term], [2027, 1], 'teacher PC followed to 2027');
+  assert.deepEqual([t.state().current.year, t.state().current.term], [2027, 1], 'teachers are on 2027 at once');
   const marks26 = Object.values(t.d.marks);
   const r26 = R.rosterFor(t.d.students, marks26, 2026, 'P1', 2027).map(s => s.first).sort();
   assert(r26.includes('Akello') && r26.includes('Babirye') && r26.includes('Dungu'), '2026 P1 roster is complete: ' + r26);
   const r27p1 = R.rosterFor(t.d.students, marks26, 2027, 'P1', 2027).map(s => s.first);
-  assert(!r27p1.includes('Akello') && r27p1.includes('Babirye'), '2027 P1 = repeaters only: ' + r27p1);
+  assert(!r27p1.includes('Akello') && r27p1.includes('Babirye') && !r27p1.includes('Dungu'), '2027 P1 = repeaters only: ' + r27p1);
   assert(R.rosterFor(t.d.students, marks26, 2027, 'P2', 2027).some(s => s.first === 'Akello'));
   assert(R.rosterFor(t.d.students, marks26, 2027, 'Middle Class', 2027).some(s => s.first === 'Bukenya'));
   assert(!R.rosterFor(t.d.students, marks26, 2026, 'Baby Class', 2027).some(s => s.first === 'Newcomer'));
@@ -153,14 +144,11 @@ const until = async (f, ms = 6000) => { const t = Date.now(); while (Date.now() 
   const sh = await t.exportMarksSheet({ year: 2027, term: 1, exam: 'BOT', cls: 'P2' });
   const w2 = new ExcelJS.Workbook(); await w2.xlsx.load(Buffer.from(sh.data, 'base64')); assert.equal(w2.worksheets[0].getCell(7, 2).value, akello.id);
 
-  // ---------- 4. a rejected promotion must not block marks ----------
-  t.d.promotions['2027|bad'] = { key: '2027|bad', studentId: akello.id, year: 2027, term: 3, decision: 'promoted', at: new Date().toISOString() }; t.d.unsynced.promotions['2027|bad'] = 1;
+  // ---------- 4. a promotion that is not allowed can never block marks ----------
+  assert.throws(() => t.setPromotion({ studentId: akello.id, year: 2027, term: 3, decision: 'promoted' }), /current academic year in Term 3/);
   t.setMark({ year: 2027, term: 1, exam: 'BOT', studentId: akello.id, className: 'P2', subject: 'English', score: 80 });
-  assert(await until(() => t.pending() === 0), 'marks flow even if one promotion is rejected');
   assert(hm.d.marks[R.markKey(2027, 1, 'BOT', akello.id, 'English')]);
-  assert(t.d.promoErrors['2027|bad']);
 
-  t.stop(); srv.close();
   console.log('year/excel/phone OK');
   process.exit(0);
 })().catch(e => { console.error(e); process.exit(1); });

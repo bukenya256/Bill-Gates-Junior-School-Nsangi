@@ -1,99 +1,100 @@
 'use strict';
+// The Teachers' portal. It runs inside the same program as the Headteacher's screens and works directly on the
+// same school records, so there is nothing to connect, pair or synchronise. A mark typed here is in the
+// Headteacher's records the moment it is saved.
 const R = require('../shared/rules');
-const { discover, DISCOVERY_PORT } = require('./discovery');
-const { normKey } = require('./server');
+const X = require('./xlsx');
 const nowISO = () => new Date().toISOString();
-const DEFAULTS = { cfg: { hm: '', key: '', teacher: '', hmId: '' }, students: [], current: null, marks: {}, comments: {}, promotions: {}, unsynced: { marks: {}, comments: {}, promotions: {} }, lastSeq: 0, academic: {subjects:null,grades:null} };
 
 class Teacher {
-  constructor(store, onChange, opts = {}) {
-    this.discoveryPort = opts.discoveryPort || DISCOVERY_PORT; this.lastFind = 0; this.s = store; this.d = store.data; this.d.academic ||= {subjects:null,grades:null}; R.configureAcademics(this.d.academic.subjects,this.d.academic.grades); this.d.promotions ||= {}; this.d.unsynced.promotions ||= {}; this.onChange = onChange || (() => { }); this.conn = { state: 'offline', error: '', last: null, address: '', searching: false }; this.busy = false; this.loop = setInterval(() => this.sync(), 8000); setTimeout(() => this.sync(), 500); }
-  pending() { return Object.keys(this.d.unsynced.marks).length + Object.keys(this.d.unsynced.comments).length + Object.keys(this.d.unsynced.promotions).length; }
-  state() { return { cfg: { ...this.d.cfg }, students: this.d.students, academic:this.d.academic, current: this.d.current || R.detectTerm(R.localISO()), marks: Object.values(this.d.marks), comments: Object.values(this.d.comments), promotions: Object.values(this.d.promotions), conn: { ...this.conn, pending: this.pending() } }; }
-  setConfig(c) {
-    const raw = normKey(c.key), key = raw.length === 8 ? raw.slice(0, 4) + '-' + raw.slice(4) : String(c.key || '').trim().toUpperCase();
-    const hm = String(c.hm || '').trim() || this.d.cfg.hm;
-    const changed = key !== this.d.cfg.key;
-    Object.assign(this.d.cfg, { hm, key, teacher: String(c.teacher || '').trim() });
-    if (changed) { this.d.cfg.hmId = ''; this.d.lastSeq = 0; }
-    this.s.save(true); this.lastFind = 0; this.sync(); this.onChange();
+  constructor(hm, getName) { this.hm = hm; this.getName = getName || (() => 'Teacher'); this._imports = new Map(); }
+  // A live view of the school records, shaped the way the Excel helpers expect.
+  get d() {
+    const hm = this.hm;
+    return { get students() { return hm.teacherStudents(); }, marks: hm.d.marks, comments: hm.d.comments, promotions: hm.d.promotions, current: hm.cur(), academic: hm.d.academic, cfg: { teacher: this.getName() } };
   }
-  _base() { let h = this.d.cfg.hm.replace(/^https?:\/\//, '').replace(/\/+$/, ''); if (!h) return ''; if (!/:\d+$/.test(h)) h += ':4750'; return 'http://' + h; }
-  setMark(m) {
-    const id = R.markKey(m.year, m.term, m.exam, m.studentId, m.subject);
-    const rec = { id, year: +m.year, term: +m.term, exam: m.exam, studentId: m.studentId, className: m.className, subject: m.subject, score: m.absent || m.cleared ? null : Number(m.score), absent: !!m.absent, cleared: !!m.cleared, by: this.d.cfg.teacher || 'Teacher', at: nowISO() };
+  state() {
+    const d = this.d;
+    return { cfg: { teacher: d.cfg.teacher }, students: d.students, academic: d.academic, current: d.current, marks: Object.values(d.marks), comments: Object.values(d.comments), promotions: Object.values(d.promotions), conn: { state: 'online', pending: 0 } };
+  }
+  _rec(m) {
+    const year = +m.year, st = this.hm.d.students[m.studentId];
+    if (!st) throw new Error('Student not found.');
+    if (year > this.hm.cur().year) throw new Error('That year has not started yet.');
+    if (!this.hm.classFor(st, year)) throw new Error(`${st.first} ${st.last} was not in the school in ${year}.`);
+    const id = R.markKey(year, m.term, m.exam, m.studentId, m.subject);
+    const rec = { id, year, term: +m.term, exam: m.exam, studentId: m.studentId, className: m.className, subject: m.subject, score: m.absent || m.cleared ? null : Number(m.score), absent: !!m.absent, cleared: !!m.cleared, by: this.getName() || 'Teacher', at: nowISO() };
     if (!rec.cleared && !rec.absent && !(rec.score >= 0 && rec.score <= R.MAX_MARK)) throw new Error('Marks must be 0–100.');
-    this.d.marks[id] = rec; this.d.unsynced.marks[id] = 1; this.s.save(); this.sync(); return rec;
+    return rec;
   }
-  setComment(id, teacher, head) { this.d.comments[id] = { id, teacher, head, at: nowISO() }; this.d.unsynced.comments[id] = 1; this.s.save(); this.sync(); }
-  setPromotion({studentId, year, term, decision}) {
-    if (Number(term) !== 3 || Number(year) !== Number(this.d.current.year) || Number(this.d.current.term) !== 3) throw new Error('Promotion decisions can only be entered during current Term 3.');
-    if (!this.d.students.some(s => s.id === studentId && s.status === 'active')) throw new Error('Active student not found.');
-    if (!['promoted','repeat'].includes(decision)) throw new Error('Choose Promoted or Repeat Class.');
-    const key = `${year}|${studentId}`;
-    const rec = {key, studentId, year: Number(year), term: 3, decision, by: this.d.cfg.teacher || 'Director of Studies', at: nowISO()};
-    this.d.promotions[key] = rec; this.d.unsynced.promotions[key] = 1; this.s.save(true); this.sync(); return rec;
+  setMark(m) { const rec = this._rec(m); this.hm.acceptMarks([rec], [], rec.by); return this.hm.d.marks[rec.id] || rec; }
+  // Save many marks at once (used by the Excel upload).
+  setMarks(list) { const recs = list.map(m => this._rec(m)); this.hm.acceptMarks(recs, [], this.getName()); return recs.map(r => this.hm.d.marks[r.id] || r); }
+  setComment(id, teacher, head) { this.hm.acceptMarks([], [{ id, teacher, head, at: nowISO() }]); }
+  setPromotion({ studentId, year, term, decision }) { return this.hm.recordPromotion({ studentId, year, term, decision, by: this.getName() || 'Director of Studies' }); }
+  clearPromotion({ studentId, year }) { return this.hm.removePromotion({ studentId, year }); }
+
+  // ---- Excel: class lists, marks sheet download, marks upload ----------------------------------
+  _roster(year, cls) { return R.rosterFor(this.d.students, Object.values(this.d.marks), Number(year), cls, this.d.current.year); }
+  _ctx({ year, term, exam, cls }) {
+    year = Number(year); term = Number(term);
+    if (!R.CLASSES.includes(cls)) throw new Error('Choose a class.');
+    if (![1, 2, 3].includes(term) || !(year >= 2020 && year <= 2100)) throw new Error('Choose the year and term.');
+    if (!R.EXAMS.some(e => e.id === exam)) throw new Error('Choose the examination.');
+    return { year, term, exam, cls };
   }
-  async _f(path, opt = {}) {
-    const base = this._base(); if (!base) { const e = new Error('Searching for the Headteacher PC…'); e.noAddress = true; throw e; }
-    const r = await fetch(base + path, { ...opt, headers: { 'X-School-Key': this.d.cfg.key, 'X-Device-Name': this.d.cfg.teacher || 'Teachers PC', 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(8000) });
-    if (r.status === 401) { const e = new Error('The school key is not accepted – check the key shown on the Headteacher PC (Settings & Backup).'); e.auth = true; throw e; }
-    if (!r.ok) throw new Error('Headteacher PC answered ' + r.status);
-    return r.json();
+  async exportClassLists() {
+    const year = this.d.current.year;
+    const data = await X.classListsWorkbook(this.d.students.filter(s => s.inYear), year);
+    return { name: `BGS-Class-Lists-${year}.xlsx`, data: data.toString('base64') };
   }
-  async findHM() {
-    if (!this.d.cfg.key) return false;
-    this.conn.searching = true; this.onChange();
-    try {
-      const found = await discover({ port: this.discoveryPort });
-      found.sort((a, b) => Number(b.id === this.d.cfg.hmId) - Number(a.id === this.d.cfg.hmId));
-      let wrongKey = false;
-      for (const f of found) {
-        if (this.d.cfg.hmId && f.id && f.id !== this.d.cfg.hmId) continue;
-        const addr = f.ip + ':' + f.port;
-        try {
-          const r = await fetch('http://' + addr + '/api/teacher/hello', { headers: { 'X-School-Key': this.d.cfg.key }, signal: AbortSignal.timeout(3000) });
-          if (r.status === 401) { wrongKey = true; continue; }
-          if (!r.ok) continue;
-          const j = await r.json();
-          this.d.cfg.hm = addr; if (j.id) this.d.cfg.hmId = j.id; this.s.save(true);
-          return true;
-        } catch (e) { void e; }
+  async exportMarksSheet(a) {
+    const { year, term, exam, cls } = this._ctx(a), subjects = R.subjectsFor(cls), roster = this._roster(year, cls);
+    if (!roster.length) throw new Error('There are no students in this class for that year yet.');
+    const existing = new Map();
+    for (const m of Object.values(this.d.marks)) if (m.year === year && m.term === term && m.exam === exam && !m.cleared && m.className === cls) existing.set(m.studentId + '|' + m.subject, m);
+    const data = await X.marksSheetWorkbook({ cls, year, term, exam, roster, subjects, existing });
+    return { name: `BGS-${X.fileSafe(cls)}-Marks-Term${term}-${exam}-${year}.xlsx`, data: data.toString('base64') };
+  }
+  // Step 1: read the filled sheet and report what WOULD be saved. Nothing is changed yet.
+  async previewMarksImport(a) {
+    const ctx = this._ctx(a), subjects = R.subjectsFor(ctx.cls);
+    const parsed = await X.readMarksSheet(Buffer.from(String(a.data || ''), 'base64'), subjects);
+    const m = parsed.meta, wrong = [];
+    if (m.class != null && String(m.class).trim().toLowerCase() !== ctx.cls.toLowerCase()) wrong.push(`class ${m.class} (you are in ${ctx.cls})`);
+    if (m.year != null && Number(m.year) !== ctx.year) wrong.push(`year ${m.year} (you chose ${ctx.year})`);
+    if (m.term != null && Number(String(m.term).replace(/\D/g, '')) !== ctx.term) wrong.push(`Term ${m.term} (you chose Term ${ctx.term})`);
+    if (m.exam != null && !X.examMatches(m.exam, ctx.exam)) wrong.push(`${m.exam} (you chose ${R.EXAMS.find(e => e.id === ctx.exam).name})`);
+    if (wrong.length) throw new Error('This sheet is for a different class or exam: ' + wrong.join('; ') + '. Choose the matching Year, Term, Examination and Class on the Enter Marks page, then upload again.');
+    if (!parsed.subjectColumns.length) throw new Error('None of the headings in this sheet match the subjects of ' + ctx.cls + ' (' + subjects.join(', ') + '). Use the sheet from "Download marks sheet".');
+    const roster = this._roster(ctx.year, ctx.cls), byAdm = new Map(roster.map(s => [X.normId(s.id), s]));
+    const errors = [], entries = [], seen = new Set(), unknown = [];
+    let same = 0, fresh = 0, changed = 0, absent = 0, studentsWithMarks = new Set();
+    for (const row of parsed.rows) {
+      const st = row.admission && byAdm.get(X.normId(row.admission));
+      const parsedMarks = row.marks.map(x => ({ subject: x.subject, p: X.parseMark(x.value) }));
+      if (!st) { if (parsedMarks.some(x => !x.p.skip)) { errors.push({ row: row.row, text: row.admission ? `Admission No. "${row.admission}" is not in ${ctx.cls} for ${ctx.year}` : 'A row has marks but no Admission No.' }); unknown.push(row.admission); } continue; }
+      if (seen.has(st.id)) { errors.push({ row: row.row, text: `${st.first} ${st.last} (${st.id}) is listed twice – the second row was ignored` }); continue; }
+      seen.add(st.id);
+      for (const { subject, p } of parsedMarks) {
+        if (p.skip) continue;
+        if (p.error) { errors.push({ row: row.row, text: `${st.first} ${st.last}, ${subject}: ${p.error}` }); continue; }
+        const old = this.d.marks[R.markKey(ctx.year, ctx.term, ctx.exam, st.id, subject)], has = old && !old.cleared;
+        if (has && (p.absent ? old.absent : (!old.absent && old.score === p.score))) { same++; continue; }
+        has ? changed++ : fresh++; if (p.absent) absent++; studentsWithMarks.add(st.id);
+        entries.push({ year: ctx.year, term: ctx.term, exam: ctx.exam, studentId: st.id, className: ctx.cls, subject, ...(p.absent ? { absent: true } : { score: p.score }) });
       }
-      this.findNote = wrongKey ? 'The Headteacher PC was found but it does not accept this school key. Check the key and save again.' : '';
-      return false;
-    } finally { this.conn.searching = false; this.lastFind = Date.now(); }
-  }
-  async sync() {
-    if (this.busy || !this.d.cfg.key) return; this.busy = true;
-    try {
-      try { await this._syncOnce(); }
-      catch (e) {
-        if (e.auth || Date.now() - this.lastFind < 6000) throw e;
-        if (await this.findHM()) await this._syncOnce(); else throw e;
-      }
-    } catch (e) {
-      const msg = e.auth ? e.message : (this.findNote || 'Looking for the Headteacher PC. Make sure it is switched on, the program is open and the Ethernet cable is plugged in on both computers.');
-      this.conn = { ...this.conn, state: 'offline', error: msg, last: this.conn.last, address: this.d.cfg.hm };
-    } finally { this.busy = false; this.onChange(); }
-  }
-  async _syncOnce() {
-    const u = this.d.unsynced, mk = Object.keys(u.marks), ck = Object.keys(u.comments), pk = Object.keys(u.promotions);
-    const saved = new Map([...mk.map(k => ['m:' + k, this.d.marks[k]?.at]), ...ck.map(k => ['c:' + k, this.d.comments[k]?.at]), ...pk.map(k => ['p:' + k, this.d.promotions[k]?.at])]);
-    if (mk.length || ck.length || pk.length) {
-      await this._f('/api/teacher/push', { method: 'POST', body: JSON.stringify({ device: this.d.cfg.teacher, marks: mk.map(k => this.d.marks[k]), comments: ck.map(k => this.d.comments[k]), promotions: pk.map(k => this.d.promotions[k]) }) });
-      for (const k of mk) if (u.marks[k] && this.d.marks[k]?.at === saved.get('m:' + k)) delete u.marks[k];
-      for (const k of ck) if (this.d.comments[k]?.at === saved.get('c:' + k)) delete u.comments[k];
-      for (const k of pk) if (this.d.promotions[k]?.at === saved.get('p:' + k)) delete u.promotions[k];
     }
-    const snap = await this._f('/api/teacher/sync?since=' + this.d.lastSeq);
-    this.d.students = snap.students; this.d.current = snap.current; this.d.academic = snap.academic || this.d.academic; R.configureAcademics(this.d.academic.subjects, this.d.academic.grades);
-    for (const r of (snap.promotions || [])) if (!u.promotions[r.key]) this.d.promotions[r.key] = r;
-    for (const m of snap.marks) { const o = this.d.marks[m.id]; if (!o || o.at <= m.at) { if (!u.marks[m.id]) this.d.marks[m.id] = m; } }
-    for (const c of snap.comments) { const o = this.d.comments[c.id]; if (!o || o.at <= c.at) { if (!u.comments[c.id]) this.d.comments[c.id] = c; } }
-    if (snap.hmId) this.d.cfg.hmId = snap.hmId;
-    this.d.lastSeq = snap.maxSeq; this.findNote = ''; this.conn = { state: 'online', error: '', last: nowISO(), address: this.d.cfg.hm, searching: false }; this.s.save();
+    const token = require('crypto').randomBytes(8).toString('hex');
+    this._imports = this._imports || new Map(); for (const [k, v] of this._imports) if (Date.now() - v.at > 30 * 60000) this._imports.delete(k);
+    this._imports.set(token, { at: Date.now(), entries });
+    return { token, sheet: parsed.sheet, subjects: parsed.subjectColumns, ignoredColumns: parsed.ignoredColumns, rows: parsed.rows.length, toSave: entries.length, fresh, changed, same, absent, students: studentsWithMarks.size, errors: errors.slice(0, 60), errorCount: errors.length, noStudent: unknown.length };
   }
-  stop() { clearInterval(this.loop); }
+  // Step 2: the person confirmed – save every mark exactly as if typed in by hand, into the school records.
+  applyMarksImport({ token }) {
+    const job = this._imports && this._imports.get(token); if (!job) throw new Error('This upload has expired. Please choose the file again.');
+    this._imports.delete(token);
+    const saved = this.setMarks(job.entries); return { saved: saved.length };
+  }
 }
-module.exports = { Teacher, DEFAULTS };
+module.exports = { Teacher };

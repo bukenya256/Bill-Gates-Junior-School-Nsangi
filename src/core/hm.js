@@ -4,7 +4,7 @@ const R = require('../shared/rules');
 const SMS = require('./sms');
 
 const DEFAULTS = {
-  meta: { createdAt: null, pw: null, lanKey: null, hmId: null, counters: {}, current: null, seq: 0, admSeq: {} },
+  meta: { createdAt: null, pw: null, counters: {}, current: null, seq: 0, admSeq: {}, schema: 0 },
   students: {}, staff: {}, payments: {}, bills: {}, salaryBills: {}, marks: {}, comments: {}, discipline: {}, promotions: {}, notifications: {}, academic: {subjects: null, grades: null}, audit: [], dirty: {},
 };
 const nowISO = () => new Date().toISOString();
@@ -17,10 +17,23 @@ class HM {
     this.d.academic ||= {subjects:null,grades:null}; this.d.notifications ||= {}; R.configureAcademics(this.d.academic.subjects,this.d.academic.grades);
     const m = this.d.meta;
     if (!m.createdAt) m.createdAt = nowISO();
-    if (!m.lanKey) m.lanKey = crypto.randomBytes(4).toString('hex').toUpperCase().replace(/(.{4})/, '$1-');
-    if (!m.hmId) m.hmId = crypto.randomBytes(8).toString('hex');
     if (!m.current) m.current = R.detectTerm(R.localISO());
+    this.migrate();
     store.save(true);
+  }
+
+  // Older data had no explicit "who belongs to which year" list. Build it once: every learner who is active now (or who joined
+  // this year) belongs to the current year in their current class. Safe to run again at any time.
+  migrate() {
+    const c = this.cur();
+    if ((this.d.meta.schema || 0) < 2) {
+      for (const s of Object.values(this.d.students)) {
+        if (s.status === 'pending' || !s.enrolled) continue;
+        s.classHistory = s.classHistory || {};
+        if (!s.classHistory[c.year] && (s.status === 'active' || s.enrolled.year === c.year)) s.classHistory[c.year] = s.className;
+      }
+      this.d.meta.schema = 2;
+    }
   }
 
   touch(col, id) { this.d.dirty[col + ':' + id] = (this.d.dirty[col + ':' + id] || 0) + 1; }
@@ -31,7 +44,7 @@ class HM {
   hasPassword() { return !!this.d.meta.pw; }
   _hash(pw, salt) { return crypto.scryptSync(pw, salt, 32).toString('hex'); }
   setPassword(pw, old) {
-    if (String(pw || '').length < 8) fail('Password must be at least 8 characters.');
+    if (String(pw || '').length < 6) fail('Password must be at least 6 characters.');
     if (this.d.meta.pw && !this.checkPassword(old)) fail('The current password is wrong.');
     const salt = crypto.randomBytes(16).toString('hex'); this.d.meta.pw = { salt, hash: this._hash(pw, salt) }; this.done();
   }
@@ -48,7 +61,7 @@ class HM {
     const key = `${y}|${t}|${s.id}`; let b = this.d.bills[key];
     if (b) return b;
     const c = this.cur();
-    if (!create || s.status !== 'active' || !s.enrolled) return null;
+    if (!create || s.status !== 'active' || !s.enrolled || !this.classFor(s, y)) return null;
     if (R.termIdx(y, t) > R.termIdx(c.year, c.term) || R.termIdx(y, t) < R.termIdx(s.enrolled.year, s.enrolled.term)) return null;
     b = this.d.bills[key] = { key, studentId: s.id, year: y, term: t, due: R.feeFor(s.className, s.type), type: s.type, className: s.className };
     this.touch('bills', key); return b;
@@ -72,13 +85,29 @@ class HM {
   }
   salaryPaid(stid, period) { return this.sumPaid(p => p.kind === 'salary' && p.staffId === stid && p.period === period); }
 
+  // The class a student was in during `year`. Returns null when the learner was NOT part of the school in that year
+  // (not yet admitted, or not carried over because the teachers did not promote / repeat them).
+  classFor(s, year) {
+    year = Number(year); const c = this.cur();
+    if (!s.enrolled || year < s.enrolled.year || year > c.year) return null;
+    const h = s.classHistory && s.classHistory[year]; if (h) return h;
+    if (year === c.year) return s.enrolled.year === c.year ? s.className : null;
+    for (let t = 3; t >= 1; t--) { const b = this.d.bills[`${year}|${t}|${s.id}`]; if (b) return b.className; }   // very old records
+    return null;
+  }
+  // Every year the learner belonged to: { 2026: 'P1', 2027: 'P2' }.
+  historyOf(s) { const out = {}; if (!s.enrolled) return out; for (let y = s.enrolled.year; y <= this.cur().year; y++) { const k = this.classFor(s, y); if (k) out[y] = k; } return out; }
+  // Has this learner got Term 3 End-of-Term marks in `year`? (the only thing that lets a teacher promote or repeat them)
+  hasEot3(sid, year) { return Object.values(this.d.marks).some(m => m.studentId === sid && m.year === Number(year) && m.term === 3 && m.exam === 'EOT' && !m.cleared); }
+  promoValid(rec, s) { return !!(rec && !rec.applied && ['promoted', 'repeat'].includes(rec.decision) && s.status === 'active' && this.hasEot3(s.id, rec.year)); }
+
   getState({ year, term, period } = {}) {
     const c = this.cur(); year = Number(year) || c.year; term = Number(term) || c.term;
     period = period || `${year}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
 
     const students = Object.values(this.d.students).map(s => {
       const fee = this.feeRow(s, year, term), ap = this.admissionPaid(s.id);
-      return { ...s, admission: { fee: R.ADMISSION_FEE, paid: ap, balance: Math.max(0, R.ADMISSION_FEE - ap), status: ap >= R.ADMISSION_FEE ? 'paid' : 'pending' }, fee, termFee: R.feeFor(s.className, s.type) };
+      const viewClass = this.classFor(s, year); return { ...s, viewClass, inYear: !!viewClass, inCurrent: !!this.classFor(s, c.year), admission: { fee: R.ADMISSION_FEE, paid: ap, balance: Math.max(0, R.ADMISSION_FEE - ap), status: ap >= R.ADMISSION_FEE ? 'paid' : 'pending' }, fee, termFee: R.feeFor(s.className, s.type) };
     }).sort((a, b) => (a.last + a.first).localeCompare(b.last + b.first));
     this.s.save();
     const staff = Object.values(this.d.staff).map(w => {
@@ -86,7 +115,7 @@ class HM {
       return { ...w, period: { key: period, demand, paid, balance: Math.max(0, demand - paid) } };
     }).sort((a, b) => (a.last + a.first).localeCompare(b.last + b.first));
     const payments = Object.values(this.d.payments).sort((a, b) => b.ts.localeCompare(a.ts));
-    return { school: R.SCHOOL, current: c, view: { year, term, period }, students, staff, payments, discipline: Object.values(this.d.discipline).sort((a,b)=>b.at.localeCompare(a.at)), promotions: Object.values(this.d.promotions), lanKey: this.d.meta.lanKey, academic: this.d.academic, notifications: Object.values(this.d.notifications).sort((a,b)=>b.at.localeCompare(a.at)), seq: this.d.meta.seq };
+    return { school: R.SCHOOL, current: c, view: { year, term, period }, students, staff, payments, discipline: Object.values(this.d.discipline).sort((a,b)=>b.at.localeCompare(a.at)), promotions: Object.values(this.d.promotions), promoProgress: this.promoProgress(), academic: this.d.academic, notifications: Object.values(this.d.notifications).sort((a,b)=>b.at.localeCompare(a.at)), seq: this.d.meta.seq };
   }
 
   setSubjects(cls, subjects) {
@@ -119,7 +148,7 @@ class HM {
     this.d.notifications[id]=rec;this.touch('notifications',id);this.log('notification draft',subject);this.done();return rec;
   }
   notificationRecipients(rec) {
-    const all = this.getState().students;
+    const all = this.getState().students.filter(s => s.inCurrent);
     let list;
     if (rec.recipients === 'all') list = all.filter(s => s.status === 'active');
     else if (rec.recipients === 'balances') list = all.filter(s => s.status === 'active' && s.fee.has && (s.fee.balance + s.fee.arrears) > 0);
@@ -169,14 +198,22 @@ class HM {
     return { sent, failed, skipped: rec.skipped, error: firstError, status: rec.status };
   }
 
+  // Uganda mobile numbers are 10 digits (e.g. 0772123456). Empty is allowed (phone is optional).
+  _phone(v) {
+    const raw = String(v == null ? '' : v).trim(); if (!raw) return '';
+    const d = raw.replace(/[\s\-().]/g, '');
+    if (!/^\d{10}$/.test(d)) fail('The phone number must be exactly 10 digits, for example 0772123456.');
+    return d;
+  }
   _need(v, label) { if (!String(v || '').trim()) fail(`${label} is required.`); return String(v).trim(); }
   addApplication(f) {
     const first = this._need(f.first, 'First name'), last = this._need(f.last, 'Surname');
     if (!R.CLASSES.includes(f.className)) fail('Choose the class applied for.');
     const type = f.type === 'boarding' ? 'boarding' : 'day', c = this.cur();
+    const phone = this._phone(f.phone);
     const n = (this.d.meta.admSeq[c.year] = (this.d.meta.admSeq[c.year] || 0) + 1);
     const id = `BGS/${c.year}/${String(n).padStart(3, '0')}`;
-    const s = this.d.students[id] = { id, first, last, className: f.className, type, gender: f.gender || '', dob: f.dob || '', parent: String(f.parent || '').trim(), phone: String(f.phone || '').trim(), address: String(f.address || '').trim(),
+    const s = this.d.students[id] = { id, first, last, className: f.className, type, gender: f.gender || '', dob: f.dob || '', parent: String(f.parent || '').trim(), phone, address: String(f.address || '').trim(),
       status: 'pending', enrolled: null, typeHistory: [{ year: c.year, term: c.term, type, at: nowISO() }], appliedOn: R.localISO(), createdAt: nowISO() };
     this.touch('students', id); this.log('application', `${id} ${first} ${last}`);
     let receipt = null; const amt = R.parseMoney(f.paidNow);
@@ -190,7 +227,7 @@ class HM {
     if (amount > left) fail(`Amount is more than the remaining admission balance (${R.money(left)}).`);
     const p = this._receipt({ kind: 'admission', studentId: s.id, studentName: `${s.first} ${s.last}`, className: s.className, type: s.type, year: this.cur().year, term: this.cur().term, amount, method, note, due: R.ADMISSION_FEE, paidBefore: before, paidTotal: before + amount, balance: left - amount });
     if (before + amount >= R.ADMISSION_FEE && s.status === 'pending') {
-      s.status = 'active'; s.enrolled = { year: this.cur().year, term: this.cur().term }; s.activatedOn = R.localISO();
+      s.status = 'active'; s.enrolled = { year: this.cur().year, term: this.cur().term }; s.activatedOn = R.localISO(); (s.classHistory ||= {})[this.cur().year] = s.className;
       this.touch('students', s.id); this.bill(s, this.cur().year, this.cur().term); this.log('admitted', `${s.id} admission fee complete – now ACTIVE`);
     }
     return p;
@@ -198,9 +235,12 @@ class HM {
   payAdmission(sid, amount, method, note) { const s = this.d.students[sid] || fail('Student not found.'); const p = this._payAdmission(s, R.parseMoney(amount), method, note); this.done(); return p; }
   updateStudent(sid, f) {
     const s = this.d.students[sid] || fail('Student not found.');
+    // Only re-check the phone when it was actually changed, so old records with other formats can still be edited.
+    const newPhone = f.phone !== undefined && String(f.phone).trim() !== (s.phone || '') ? this._phone(f.phone) : undefined;
+    if (newPhone !== undefined) f = { ...f, phone: newPhone };
     for (const k of ['first', 'last', 'parent', 'phone', 'address', 'gender', 'dob']) if (f[k] !== undefined) s[k] = String(f[k]).trim();
     if (!s.first || !s.last) fail('Name cannot be empty.');
-    if (f.className && f.className !== s.className) { if (!R.CLASSES.includes(f.className)) fail('Unknown class.'); this.log('class change', `${sid}: ${s.className} → ${f.className}`); s.className = f.className; this.refreshCurrentBill(s); }
+    if (f.className && f.className !== s.className) { if (!R.CLASSES.includes(f.className)) fail('Unknown class.'); this.log('class change', `${sid}: ${s.className} → ${f.className}`); s.className = f.className; if (s.classHistory && s.classHistory[this.cur().year]) s.classHistory[this.cur().year] = f.className; this.refreshCurrentBill(s); }
     this.touch('students', sid); this.done(); return s;
   }
   setType(sid, type) {
@@ -215,7 +255,10 @@ class HM {
     if (s.status === 'pending') fail('This applicant has not completed the admission fee yet.');
     if (!['active', 'inactive'].includes(status)) fail('Bad status.');
     s.status = status; s.statusNote = String(reason || '').trim(); s.statusChangedOn = R.localISO();
-    if (status === 'active') this.bill(s, this.cur().year, this.cur().term);
+    if (status === 'active') {
+      if (s.enrolled && !this.classFor(s, this.cur().year)) { (s.classHistory ||= {})[this.cur().year] = s.className; delete s.notCarriedInto; this.log('student re-enrolled', `${sid} placed in ${s.className} for ${this.cur().year}`); }
+      this.bill(s, this.cur().year, this.cur().term);
+    }
     this.touch('students', sid); this.log('student ' + status, `${sid} ${s.statusNote}`); this.done(); return s;
   }
 
@@ -244,19 +287,37 @@ class HM {
     }
     this.log('disciplinary action reversed',id+': '+reason); this.done(); return rec;
   }
+  // A teacher decides Promoted / Repeat. Strict rules: current year, Term 3, learner is active, belongs to this year,
+  // and already has Term 3 End-of-Term marks. Nothing else can move a learner into next year.
   recordPromotion({studentId, year, term, decision, by}) {
     const s = this.d.students[studentId] || fail('Student not found.');
     year = Number(year); term = Number(term);
     if (term !== 3 || year < 2026 || year > 2099) fail('Promotion decisions are for Term 3 only.');
     if (!['promoted','repeat'].includes(decision)) fail('Choose Promoted or Repeat Class.');
-    if (s.status !== 'active') fail('Only active students can receive a promotion decision.');
     if (year !== this.cur().year || this.cur().term !== 3) fail('Promotion decisions must be for the current academic year in Term 3.');
-    if (!Object.values(this.d.marks).some(m => m.studentId === studentId && m.year === year && m.term === 3 && m.exam === 'EOT' && !m.cleared)) fail('Record Term 3 End of Term exam marks before making a promotion decision.');
-    const key = `${year}|${studentId}`;
-    const rec = { key, studentId, year, term: 3, className: s.className, decision, by: String(by || 'Director of Studies').slice(0,80), at: nowISO(), applied: false };
-    const old = this.d.promotions[key];
+    if (s.status !== 'active' || !this.classFor(s, year)) fail('Only active students of this year can receive a promotion decision.');
+    if (!this.hasEot3(studentId, year)) fail('Record Term 3 End of Term exam marks before making a promotion decision.');
+    const key = `${year}|${studentId}`, old = this.d.promotions[key];
     if (old && old.applied) fail('This promotion has already been applied.');
+    const rec = { key, studentId, year, term: 3, className: this.classFor(s, year), decision, by: String(by || 'Director of Studies').slice(0,80), at: nowISO(), applied: false };
     this.d.promotions[key] = rec; this.touch('promotions', key); this.log('promotion decision', `${studentId}: ${decision} for ${year}`); this.done(); return rec;
+  }
+  // Undo a decision (before the new year starts). The record is kept but counts as "not decided".
+  removePromotion({studentId, year}) {
+    year = Number(year); const key = `${year}|${studentId}`, old = this.d.promotions[key];
+    if (year !== this.cur().year || this.cur().term !== 3) fail('Promotion decisions can only be changed during the current Term 3.');
+    if (!old || old.decision === 'none') return old || null;
+    if (old.applied) fail('This promotion has already been applied.');
+    old.decision = 'none'; old.at = nowISO(); this.touch('promotions', key); this.log('promotion decision removed', `${studentId} ${year}`); this.done(); return old;
+  }
+  promoProgress() {
+    const c = this.cur(), out = { year: c.year, term: c.term, members: 0, promoted: 0, repeat: 0, undecided: 0, noMarks: 0 };
+    for (const s of Object.values(this.d.students)) {
+      if (s.status !== 'active' || !this.classFor(s, c.year)) continue; out.members++;
+      const rec = this.d.promotions[`${c.year}|${s.id}`];
+      if (this.promoValid(rec, s)) out[rec.decision]++; else { out.undecided++; if (!this.hasEot3(s.id, c.year)) out.noMarks++; }
+    }
+    return out;
   }
 
   payFees(sid, year, term, amount, method, note) {
@@ -315,26 +376,61 @@ class HM {
     this.d.payments[no] = rec; this.touch('payments', no); this.log('receipt', `${no} ${rec.amount}`); return rec;
   }
 
+  // What clicking "Start new year" will do, shown to the Headteacher before confirming.
+  newYearPreview() {
+    const c = this.cur(), last = R.CLASSES[R.CLASSES.length - 1];
+    const out = { from: c.year, to: c.year + 1, term: c.term, canStart: c.term === 3, promoted: 0, repeat: 0, undecided: 0, graduating: 0, undecidedNames: [], undecidedList: [] };
+    for (const s of Object.values(this.d.students)) {
+      if (s.status !== 'active' || !this.classFor(s, c.year)) continue;
+      const rec = this.d.promotions[`${c.year}|${s.id}`];
+      if (this.promoValid(rec, s)) { if (rec.decision === 'promoted') { out.promoted++; if (this.classFor(s, c.year) === last) out.graduating++; } else out.repeat++; }
+      else {
+        const hasMarks = this.hasEot3(s.id, c.year), reason = !hasMarks ? 'no Term 3 End-of-Term marks' : 'teachers have not chosen Promoted or Repeat';
+        out.undecided++; out.undecidedNames.push(`${s.first} ${s.last} (${this.classFor(s, c.year)})`); out.undecidedList.push({ id: s.id, name: `${s.first} ${s.last}`, className: this.classFor(s, c.year), reason });
+      }
+    }
+    return out;
+  }
+  // The "New Year" button: reads the current year (e.g. 2026) and moves the school to the next (2027), Term 1.
+  startNewYear() {
+    const c = this.cur();
+    if (c.term !== 3) fail(`The new year can only be started once the school is in Term 3 (now Term ${c.term} ${c.year}), because the teachers record who is promoted in Term 3.`);
+    return this.setCurrentTerm(c.year + 1, 1);
+  }
+  // Who is in the school next year? ONLY learners the teachers promoted or told to repeat (after entering Term 3 End-of-Term marks).
+  // Everyone else is left in the old year's records: they do not appear in the new year's lists, classes or fees.
+  _rollYear(previous, year) {
+    const last = R.CLASSES[R.CLASSES.length - 1];
+    for (const s of Object.values(this.d.students)) {
+      if (s.status === 'pending' || !s.enrolled) continue;               // applicants wait; they join the year they pay admission
+      const was = this.classFor(s, previous.year);
+      if (!was) continue;                                                // was not part of the old year (nothing to carry)
+      s.classHistory = s.classHistory || {}; s.classHistory[previous.year] = was;   // freeze the class the child ended the old year in
+      const rec = this.d.promotions[`${previous.year}|${s.id}`];
+      if (this.promoValid(rec, s)) {
+        if (rec.decision === 'promoted') {
+          const i = R.CLASSES.indexOf(was);
+          if (i >= 0 && i < R.CLASSES.length - 1) { s.className = R.CLASSES[i + 1]; s.classHistory[year] = s.className; }
+          else { s.className = was; s.status = 'inactive'; s.statusNote = 'Completed Primary 7'; s.statusChangedOn = R.localISO(); }
+        } else { s.className = was; s.classHistory[year] = was; }       // repeat: same class again
+        rec.applied = true; rec.appliedAt = nowISO(); this.touch('promotions', rec.key);
+      } else if (s.status === 'active') {
+        // No valid decision: NOT carried into the new year. Marked inactive so no screen can pick them up by mistake;
+        // the Headteacher can still re-enrol them on purpose with "Make active".
+        s.className = was; s.status = 'inactive'; s.notCarriedInto = year; s.statusChangedOn = R.localISO();
+        s.statusNote = `Not carried into ${year}: the teachers did not promote or repeat this learner.`;
+        if (rec && !rec.applied) { rec.lapsed = true; this.touch('promotions', rec.key); }
+      }
+      this.touch('students', s.id);
+    }
+  }
   setCurrentTerm(year, term) {
     year = Number(year); term = Number(term); if (![1, 2, 3].includes(term) || year < 2020 || year > 2100) fail('Invalid year/term.');
     const previous = this.cur();
     if (R.termIdx(year,term) < R.termIdx(previous.year,previous.term)) fail('Cannot roll back the current term. Use the year and term selectors to view historical records.');
     if (year > previous.year) {
       if (term !== 1 || year !== previous.year + 1 || previous.term !== 3) fail('Finish Term 3 and start the next academic year at Term 1.');
-
-      for (const s of Object.values(this.d.students)) {
-        const rec = this.d.promotions[`${previous.year}|${s.id}`];
-        if (!rec || rec.applied || s.status !== 'active') continue;
-        if (rec.decision === 'promoted') {
-          const i = R.CLASSES.indexOf(s.className);
-          if (i >= 0 && i < R.CLASSES.length - 1) s.className = R.CLASSES[i + 1];
-          else if (i === R.CLASSES.length - 1) { s.status = 'inactive'; s.statusNote = 'Completed Primary 7'; }
-        }
-        s.classHistory = s.classHistory || {};
-        s.classHistory[previous.year] = rec.className;
-        s.classHistory[year] = s.className;
-        rec.applied = true; rec.appliedAt = nowISO(); this.touch('promotions', rec.key); this.touch('students', s.id);
-      }
+      this._rollYear(previous, year);
     }
     this.d.meta.current = { year, term }; this.log('current term', `${year} T${term}`);
     for (const s of Object.values(this.d.students)) if (s.status === 'active') this.bill(s, year, term);
@@ -346,6 +442,7 @@ class HM {
     let a = 0;
     for (const m of marks) {
       if (!m || !m.id || !m.studentId || typeof m.at !== 'string') continue;
+      const st = this.d.students[m.studentId]; if (!st || !this.classFor(st, +m.year)) continue;
       if (!m.cleared && !m.absent && !(Number.isFinite(m.score) && m.score >= 0 && m.score <= R.MAX_MARK)) continue;
       const old = this.d.marks[m.id]; if (old && old.at > m.at) continue;
       this.d.marks[m.id] = { id: m.id, year: +m.year, term: +m.term, exam: m.exam, studentId: m.studentId, className: m.className, subject: m.subject, score: m.cleared || m.absent ? null : m.score, absent: !!m.absent, cleared: !!m.cleared, by: String(m.by || device).slice(0, 60), at: m.at, seq: this.nextSeq() };
@@ -360,11 +457,9 @@ class HM {
   }
   saveHeadRemark(id, teacher, head) { this.acceptMarks([], [{ id, teacher, head, at: nowISO() }]); this.s.save(true); }
   marksFor(year) { return Object.values(this.d.marks).filter(m => m.year === Number(year)); }
-  getMarks(year) { return { marks: this.marksFor(year), comments: Object.values(this.d.comments).filter(c => c.id.startsWith(year + '|')), promotions: Object.values(this.d.promotions).filter(p => p.year === Number(year)), academic: this.d.academic, students: Object.values(this.d.students).map(s => ({ id: s.id, first: s.first, last: s.last, className: s.className, classHistory: s.classHistory || {}, status: s.status })) }; }
-  teacherSnapshot(since) {
-    since = Number(since) || 0;
-    return { current: this.cur(), academic: this.d.academic, students: Object.values(this.d.students).filter(s => s.status !== 'pending').map(s => ({ id: s.id, first: s.first, last: s.last, className: s.className, classHistory: s.classHistory || {}, status: s.status, year: this.cur().year })),
-      promotions: Object.values(this.d.promotions), marks: Object.values(this.d.marks).filter(m => m.seq > since), comments: Object.values(this.d.comments).filter(c => c.seq > since), maxSeq: this.d.meta.seq };
-  }
+  _studentRows() { return Object.values(this.d.students).filter(s => s.status !== 'pending' && s.enrolled).map(s => { const c = this.cur(), cls = this.classFor(s, c.year); return { id: s.id, first: s.first, last: s.last, className: cls || s.className, classHistory: this.historyOf(s), status: s.status, year: c.year, inYear: !!cls }; }); }
+  getMarks(year) { return { marks: this.marksFor(year), comments: Object.values(this.d.comments).filter(c => c.id.startsWith(year + '|')), promotions: Object.values(this.d.promotions).filter(p => p.year === Number(year)), academic: this.d.academic, students: this._studentRows() }; }
+  // What the Teachers' portal may see: names, admission numbers and classes only. Never fees, phones or salaries.
+  teacherStudents() { return this._studentRows(); }
 }
 module.exports = { HM, Fail, DEFAULTS };

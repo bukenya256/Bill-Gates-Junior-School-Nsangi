@@ -56,10 +56,16 @@ const termIdx = (y, t) => Number(y) * 3 + Number(t);
 const prettyDate = iso => new Date(iso + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 
 const markKey = (y, t, e, sid, sub) => `${y}|${t}|${e}|${sid}|${sub}`;
+// Which class a student was in during a given academic year (null = the learner was not part of the school that year).
+// Membership comes only from the year-by-year history the Headteacher PC keeps; it is never guessed from today's class.
+function classInYear(s, year) {
+  return (s.classHistory && s.classHistory[year]) || null;
+}
 function rosterFor(students, marks, year, cls, currentYear) {
   const ids = new Set();
   for (const m of marks) if (Number(m.year) === Number(year) && m.className === cls && !m.cleared) ids.add(m.studentId);
-  return students.filter(s => ids.has(s.id) || (Number(year) === Number(currentYear) && s.status === 'active' && s.className === cls))
+  const cur = Number(year) === Number(currentYear);
+  return students.filter(s => classInYear(s, year) && (ids.has(s.id) || (classInYear(s, year) === cls && (!cur || s.status === 'active'))))
     .map(s => ({ id: s.id, first: s.first, last: s.last, className: cls }))
     .sort((a, b) => (a.last + a.first).localeCompare(b.last + b.first));
 }
@@ -80,4 +86,4 @@ function classResults(roster, y, t, e, marksMap) {
 }
 const marksToMap = marks => { const m = new Map(); for (const x of marks) m.set(x.id, x); return m; };
 
-if (typeof module !== 'undefined') module.exports = { SCHOOL, CLASSES, NURSERY, LOWER, DEFAULT_SUBJECTS, configureAcademics, subjectsFor, EXAMS, MAX_MARK, GRADES, gradeOf, ADMISSION_FEE, FEE_TABLE, feeFor, num, money, parseMoney, termsFor, localISO, detectTerm, termIdx, prettyDate, markKey, rosterFor, resultFor, classResults, marksToMap };
+if (typeof module !== 'undefined') module.exports = { SCHOOL, CLASSES, NURSERY, LOWER, DEFAULT_SUBJECTS, configureAcademics, subjectsFor, EXAMS, MAX_MARK, GRADES, gradeOf, ADMISSION_FEE, FEE_TABLE, feeFor, num, money, parseMoney, termsFor, localISO, detectTerm, termIdx, prettyDate, markKey, classInYear, rosterFor, resultFor, classResults, marksToMap };

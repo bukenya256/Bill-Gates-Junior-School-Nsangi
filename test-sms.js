@@ -26,8 +26,8 @@ r=await hm.sendNotification(m2.id,{username:'u',key:'k'},mock); assert.equal(r.s
 let seen=null; const srv=http.createServer((q,s)=>{let body='';q.on('data',x=>body+=x);q.on('end',()=>{seen={h:q.headers,body};s.setHeader('content-type','application/json');s.end(JSON.stringify({SMSMessageData:{Recipients:[{number:'+256772123456',statusCode:101,status:'Success',cost:'UGX 32'},{number:'+256701000111',statusCode:403,status:'InvalidPhoneNumber'}]}}))})}).listen(4797);
 const out=await SMS.sendBatch({username:'u1',key:'SECRETKEY',senderId:'BGSJS',endpoint:'http://127.0.0.1:4797'},['+256772123456','+256701000111'],'Hi');
 assert.equal(seen.h.apikey,'SECRETKEY'); assert(seen.body.includes('username=u1')&&seen.body.includes('from=BGSJS')&&seen.body.includes('%2B256772123456')); assert.equal(out[0].ok,true); assert.equal(out[1].ok,false); srv.close();
-const dd=fs.mkdtempSync(path.join(os.tmpdir(),'bgs-app-')); const core=createApp({dataDir:dd,backupDir:path.join(dd,'bk'),port:4790,enc:{enc:s=>'enc:'+Buffer.from(s).toString('base64'),dec:s=>Buffer.from(s.slice(4),'base64').toString()}});
-await core.call('mode.set','hm'); await core.call('auth.setup',{pw:'secret123'});
+const dd=fs.mkdtempSync(path.join(os.tmpdir(),'bgs-app-')); const core=createApp({dataDir:dd,backupDir:path.join(dd,'bk'),enc:{enc:s=>'enc:'+Buffer.from(s).toString('base64'),dec:s=>Buffer.from(s.slice(4),'base64').toString()}});
+await core.call('auth.setup',{role:'hm',pw:'secret1'});
 assert((await core.call('settings.sms',{username:'bad name!',key:'k'})).error); assert((await core.call('settings.sms',{username:'school',key:''})).error);
 assert((await core.call('settings.sms',{username:'school',key:'TOPSECRET',senderId:'BGSJS'})).ok);
 const g=await core.call('sms.get'); assert.equal(g.data.hasKey,true); assert(!JSON.stringify(g).includes('TOPSECRET'));

@@ -14,15 +14,16 @@ p=hm.payFees(id,2026,3,50000); assert.equal(p.paidTotal,250000); assert.equal(p.
 hm.setType(id,'day'); st=hm.getState().students[0]; assert.equal(st.fee.due,300000); assert.equal(st.fee.balance,50000);
 hm.setType(id,'boarding'); assert.equal(hm.getState().students[0].fee.balance,250000);
 hm.setStudentStatus(id,'inactive','indiscipline'); hm.setStudentStatus(id,'active');
-const w=hm.addStaff({first:'Moses',last:'K',title:'Teacher',salary:'300,000',employedOn:'2026-10-01'});
+const w=hm.addStaff({first:'Moses',last:'K',title:'Teacher',salary:'300,000',employedOn:'2026-01-15'});
 hm.paySalary(w.id,'2026-10',200000); let sw=hm.getState({period:'2026-10'}).staff[0]; assert.equal(sw.period.balance,100000);
 hm.setStaffStatus(w.id,'inactive'); assert.equal(hm.getState().staff.length,1);
 
+hm.acceptMarks([{id:'2026|3|EOT|'+id+'|Mathematics',year:2026,term:3,exam:'EOT',studentId:id,className:'P5',subject:'Mathematics',score:60,at:new Date().toISOString()}]); hm.recordPromotion({studentId:id,year:2026,term:3,decision:'repeat'});
 hm.setCurrentTerm(2027,1); st=hm.getState().students[0]; assert.equal(st.fee.arrears,250000); assert.equal(st.fee.due,500000);
 
 assert.equal(hm.acceptMarks([{id:'2026|3|BOT|'+id+'|Mathematics',year:2026,term:3,exam:'BOT',studentId:id,className:'P5',subject:'Mathematics',score:77,at:new Date().toISOString()}]),1);
 assert.equal(hm.acceptMarks([{id:'x',studentId:id,score:500,at:'z'}]),0);
-assert.equal(hm.teacherSnapshot(0).marks.length,1);
-assert(!JSON.stringify(hm.teacherSnapshot(0)).includes('phone'));
+assert.equal(hm.marksFor(2026).length,2);
+assert(!JSON.stringify(hm.teacherStudents()).includes('phone'));
 hm.s.flush(); const hm2=new HM(new Store(path.join(dir,'db.json'),DEFAULTS)); assert.equal(Object.keys(hm2.d.payments).length,5);
 console.log('core OK', Object.keys(hm.d.dirty).length,'dirty keys');

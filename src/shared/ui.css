@@ -138,9 +138,6 @@ button:active:not(:disabled){transform:translateY(1px)}
 .keybox{user-select:all}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 
-/* Layout polish */
-.side{overflow:hidden}
-.side .nav{flex:1 1 auto;min-height:0;overflow-y:auto;padding-right:2px;scrollbar-width:thin;scrollbar-color:#2c4c78 transparent}
-.side .bottom{flex:0 0 auto;margin-top:8px}
-.kpi b{display:block;white-space:nowrap;font-size:clamp(1.3rem,1.75vw,1.65rem)}
-.kpis{grid-template-columns:repeat(auto-fill,minmax(230px,1fr))}
+/* start / login screen */
+.setup form input{width:100%;margin:8px 0;text-align:center}.setup form button{width:100%;margin-top:6px;padding:10px}
+.setup h1{margin:10px 0 4px}.setup .choice{cursor:pointer}
