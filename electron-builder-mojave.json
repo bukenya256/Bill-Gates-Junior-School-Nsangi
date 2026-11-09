@@ -18,5 +18,6 @@
   },
   "dmg": {
     "artifactName": "BGS-School-System-Mojave-${version}-${arch}.dmg"
-  }
+  },
+  "beforePack": "./build-bundle.js"
 }

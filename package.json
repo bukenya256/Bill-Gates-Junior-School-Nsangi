@@ -5,7 +5,7 @@
   "author": "Bill Gates Junior School Nsangi",
   "main": "src/main.bundle.js",
   "scripts": {
-    "bundle": "esbuild src/main.js --bundle --platform=node --target=node18 --external:electron --outfile=src/main.bundle.js --log-level=warning",
+    "bundle": "node build-bundle.js",
     "prestart": "npm run bundle",
     "start": "electron .",
     "test": "node test-core.js && node test-recovery.js && node test-sms.js && node test-new-features.js && node test-year-excel.js && node test-year-logic.js && node test-bundle.js",
@@ -53,6 +53,7 @@
         "dmg"
       ],
       "category": "public.app-category.education"
-    }
+    },
+    "beforePack": "./build-bundle.js"
   }
 }
