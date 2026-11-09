@@ -21,3 +21,6 @@ The `01-WEBSITE` folder, the web release notes and the desktop's import of web-o
 
 ## 4. Tests
 `npm test` runs six test files, including `test-year-logic.js` (the Bukenya scenario and the one-computer logins). Two old tests were date-dependent / timing-dependent and were fixed.
+
+## 5. Build fix (Mac "Cannot find module 'call-bind-apply-helpers'")
+The installed Mac app was missing a tiny library file that the Excel library needs, so it crashed at start-up. The build now bundles the program and the Excel library into one file (`npm run bundle` -> `src/main.bundle.js`), so the installed app needs no `node_modules` folder and this kind of missing-file crash cannot happen (Windows included). `test-bundle.js` checks this. The two GitHub workflows run the bundle step; the Windows one also retries on temporary GitHub download errors.
